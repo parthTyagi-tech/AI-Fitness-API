@@ -16,19 +16,14 @@ from utils import validate_predict_form, build_notes, build_split, build_exercis
 main = Blueprint('main', __name__)
 
 
-@main.route('/')
-def home():
-    return "AI Fitness API is running 🚀"
 
 
 
 # ── Home ──────────────────────────────────────────────────────────────────────
-
 @main.route('/')
 def home():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
-    return redirect(url_for('main.login'))
+    return "AI Fitness API is running 🚀"
+
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
