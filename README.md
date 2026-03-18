@@ -68,7 +68,7 @@
 
 > Profile card with avatar, status indicator, full prediction history table, and record count — all in one view.
 
-![Dashboard](assets/screenshots/dashboard.png)
+![Dashboard](https://github.com/user-attachments/assets/dfc09ea4-e319-4d49-ace9-2e7aee68a1f2)
 
 <br/>
 
