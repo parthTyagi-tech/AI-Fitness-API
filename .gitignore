@@ -6,6 +6,8 @@
 *.sqlite
 *.sqlite3
 instance/
+fitness_dataset_5000.csv
+start_01.ipynb
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
