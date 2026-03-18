@@ -58,7 +58,7 @@
 
 > Instantly displays predicted body fat %, fitness category, animated gauge bar, biometric chips, side metric cards, and workout frequency — all driven by the ML engine.
 
-![Results Page](assets/screenshots/results.png)
+![Results Page](https://github.com/user-attachments/assets/7278b841-05c1-4dad-8c27-bb4b04e48f59)
 
 <br/>
 
