@@ -22,7 +22,9 @@ main = Blueprint('main', __name__)
 # ── Home ──────────────────────────────────────────────────────────────────────
 @main.route('/')
 def home():
-    return render_template('home.html')
+    if current_user.is_authenticated:
+        return redirect(url_for('main.fitness_form'))
+    return redirect(url_for('main.login'))
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
