@@ -48,7 +48,7 @@
 
 > 12-field biometric form with section dividers, neumorphic inputs, and a pill-shaped animated submit button. Auto-populates from saved user profile.
 
-![Prediction Form](<img width="1502" height="913" alt="Image" src="https://github.com/user-attachments/assets/fc41595f-ef6f-43ab-a892-30a29815c906" />)
+![Prediction Form](https://github.com/user-attachments/assets/fc41595f-ef6f-43ab-a892-30a29815c906)
 
 <br/>
 
