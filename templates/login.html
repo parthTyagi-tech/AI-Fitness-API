@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login | AI Driven Fitness Intelligence System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg:     #0a0a0a;
+      --card:   #141414;
+      --border: #2a2a2a;
+      --border2:#333333;
+      --text:   #f0f0f0;
+      --muted:  #888888;
+      --dim:    #555555;
+      --accent: #d2494b;
+      --accent2:#e0464b33;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: 'Exo 2', sans-serif; color: var(--text); background: var(--bg); }
+
+    /* ── Background canvas ── */
+    #bg { position: fixed; inset: 0; z-index: 0; }
+
+    /* ── Grain overlay ── */
+    .grain {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+    }
+
+    /* ── HUD grid lines ── */
+    .hud-grid {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    /* ── Brand bar ── */
+    .brand-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 14px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(10,10,10,0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+    }
+    .brand-logo {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 13px; font-weight: 700; letter-spacing: 3px;
+      color: var(--text); text-transform: uppercase;
+    }
+    .brand-logo span { color: var(--accent); }
+    .brand-name {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 18px; font-weight: 900; letter-spacing: 2px; color: var(--muted);
+    }
+    .brand-badge {
+      padding: 5px 12px; border-radius: 4px;
+      border: 1px solid var(--border2);
+      font-size: 11px; letter-spacing: 2px; color: var(--dim); font-weight: 600;
+    }
+
+    /* ── HUD corner decorations ── */
+    .corner { position: fixed; width: 24px; height: 24px; z-index: 10; }
+    .corner.tl { top: 62px; left: 16px; border-top: 1px solid var(--border2); border-left: 1px solid var(--border2); }
+    .corner.tr { top: 62px; right: 16px; border-top: 1px solid var(--border2); border-right: 1px solid var(--border2); }
+    .corner.bl { bottom: 36px; left: 16px; border-bottom: 1px solid var(--border2); border-left: 1px solid var(--border2); }
+    .corner.br-c { bottom: 36px; right: 16px; border-bottom: 1px solid var(--border2); border-right: 1px solid var(--border2); }
+
+    /* ── Side HUD labels ── */
+    .hud-side {
+      position: fixed; left: 20px; top: 50%; transform: translateY(-50%);
+      z-index: 8; display: flex; flex-direction: column; gap: 10px;
+    }
+    .hud-item {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 9px; letter-spacing: 2.5px; color: rgba(255,255,255,0.12);
+      text-transform: uppercase; white-space: nowrap;
+      writing-mode: vertical-rl; transform: rotate(180deg);
+    }
+
+    /* ── Stage ── */
+    .stage {
+      position: fixed; inset: 0; z-index: 5;
+      display: flex; align-items: center; justify-content: center;
+      padding: 80px 24px 60px;
+    }
+
+    /* ── Two-column layout ── */
+    .login-wrap {
+      display: flex; align-items: center; gap: 60px;
+      max-width: 900px; width: 100%;
+    }
+
+    /* ── Left info panel ── */
+    .info-panel {
+      flex: 1; min-width: 0;
+      animation: slideLeft 0.9s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    .info-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 12px; border-radius: 999px;
+      border: 1px solid var(--border2);
+      background: rgba(255,255,255,0.03);
+      font-size: 10px; letter-spacing: 3px;
+      color: var(--dim); font-weight: 700; text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+    .info-eyebrow::before {
+      content: '●'; font-size: 6px; color: var(--accent);
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+
+    .info-panel h1 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 58px; font-weight: 900; line-height: 0.95;
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 18px;
+    }
+    .info-panel h1 em {
+      font-style: normal; color: var(--accent);
+      display: block;
+    }
+    .info-panel p {
+      color: var(--muted); font-size: 14px; line-height: 1.75;
+      max-width: 380px; margin-bottom: 32px;
+    }
+
+    /* ── Feature list ── */
+    .feature-list { display: flex; flex-direction: column; gap: 12px; }
+    .feature-item {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; color: var(--muted);
+    }
+    .feature-dot {
+      width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      box-shadow: inset 2px 2px 6px rgba(0,0,0,0.6), inset -1px -1px 3px rgba(255,255,255,0.03);
+    }
+
+    /* ══════════════════════════
+       CARD  (neumorphic dark)
+    ══════════════════════════ */
+    .card {
+      width: 100%; max-width: 400px; flex-shrink: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      box-shadow:
+        inset 2px 2px 10px rgba(0,0,0,1),
+        inset -1px -1px 5px rgba(255,255,255,0.06),
+        0 28px 56px rgba(0,0,0,0.7);
+      padding: 44px 38px;
+      animation: slideUp 0.9s cubic-bezier(0.16,1,0.3,1) both;
+      position: relative; overflow: hidden;
+    }
+
+    /* Subtle shimmer line at top */
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    }
+
+    /* Animated side accent line */
+    .card-accent {
+      position: absolute; top: 20px; bottom: 20px; right: 0; width: 2px;
+      background: linear-gradient(180deg, transparent, rgba(210,73,75,0.3), transparent);
+      border-radius: 2px 0 0 2px;
+      animation: accentPulse 3s ease-in-out infinite;
+    }
+    @keyframes accentPulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+    /* ── Card header ── */
+    .card-eyebrow {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+    .eyebrow-icon {
+      width: 34px; height: 34px;
+      background: rgba(210,73,75,0.08);
+      border: 1px solid rgba(210,73,75,0.18);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .eyebrow-icon svg { width: 16px; height: 16px; }
+    .eyebrow-text {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 10px; letter-spacing: 3px; color: var(--dim);
+      font-weight: 700; text-transform: uppercase;
+    }
+
+    .card h2 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 34px; font-weight: 900; line-height: 1;
+      letter-spacing: 1px; margin-bottom: 6px; text-transform: uppercase;
+    }
+    .card h2 span { color: var(--accent); }
+    .card .sub { color: var(--muted); font-size: 12px; line-height: 1.6; margin-bottom: 26px; }
+
+    /* ── Flash messages ── */
+    .flash {
+      margin-bottom: 16px; padding: 10px 14px; border-radius: 8px;
+      border-left: 2px solid var(--accent);
+      background: rgba(210,73,75,0.08); color: #e8888a; font-size: 12px;
+    }
+
+    /* ── Field labels ── */
+    .field { margin-bottom: 14px; }
+    .field-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; letter-spacing: 2px; color: var(--dim);
+      font-weight: 600; text-transform: uppercase; margin-bottom: 8px;
+    }
+    .field-label::before {
+      content: ''; display: block; width: 10px; height: 1px; background: var(--border2);
+    }
+
+    /* ══════════════════════════
+       INPUT  (neumorphic)
+    ══════════════════════════ */
+    .input {
+      width: 100%;
+      min-height: 46px;
+      color: #fff;
+      outline: none;
+      transition: 0.35s;
+      padding: 0px 14px;
+      background-color: #212121;
+      border-radius: 6px;
+      border: 1px solid #2a2a2a;
+      font-family: 'Exo 2', sans-serif;
+      font-size: 14px;
+      box-shadow:
+        6px 6px 10px rgba(0,0,0,1),
+        1px 1px 10px rgba(255,255,255,0.04);
+    }
+    .input::placeholder { color: #555; }
+    .input:focus::placeholder { opacity: 0; transition: 0.3s; }
+    .input:focus {
+      transform: scale(1.03);
+      border-color: #333;
+      box-shadow:
+        6px 6px 10px rgba(0,0,0,1),
+        1px 1px 10px rgba(255,255,255,0.06),
+        inset 2px 2px 10px rgba(0,0,0,1),
+        inset -1px -1px 5px rgba(255,255,255,0.04);
+    }
+
+    /* ── Forgot password row ── */
+    .forgot-row {
+      display: flex; justify-content: flex-end;
+      margin-top: -6px; margin-bottom: 22px;
+    }
+    .forgot-link {
+      font-size: 11px; color: var(--dim); text-decoration: none;
+      transition: color 0.2s;
+    }
+    .forgot-link:hover { color: var(--muted); }
+
+    /* ══════════════════════════
+       STYLED BUTTON
+    ══════════════════════════ */
+    .styled-button {
+      position: relative;
+      padding: 0.9rem 1.6rem;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #ffffff;
+      background: linear-gradient(to bottom, #171717, #242424);
+      border-radius: 9999px;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,1), 0 10px 20px rgba(0,0,0,0.4);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #292929;
+      width: 100%;
+      font-family: 'Barlow Condensed', sans-serif;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .styled-button::before {
+      content: "";
+      position: absolute;
+      top: -2px; right: -1px; bottom: -1px; left: -1px;
+      background: linear-gradient(to bottom, #292929, #000000);
+      z-index: -1;
+      border-radius: 9999px;
+      transition: all 0.2s ease;
+      opacity: 1;
+    }
+    .styled-button:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 2px rgba(0,0,0,1), 0 5px 10px rgba(0,0,0,0.4);
+    }
+    .styled-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+    }
+
+    /* Inner circle icon */
+    .styled-button .inner-button {
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(to bottom, #171717, #242424);
+      width: 36px; height: 36px;
+      margin-left: 10px;
+      border-radius: 50%;
+      box-shadow: 0 0 1px rgba(0,0,0,1);
+      border: 1px solid #252525;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .styled-button .inner-button::before {
+      content: "";
+      position: absolute;
+      top: -2px; right: -1px; bottom: -1px; left: -1px;
+      background: linear-gradient(to bottom, #292929, #000000);
+      z-index: -1;
+      border-radius: 9999px;
+      transition: all 0.2s ease;
+      opacity: 1;
+    }
+    .styled-button .inner-button .icon {
+      filter: drop-shadow(0 10px 20px rgba(26,25,25,0.9)) drop-shadow(0 0 4px rgba(0,0,0,1));
+      transition: all 0.4s ease-in-out;
+    }
+    .styled-button:hover .inner-button .icon {
+      filter: drop-shadow(0 10px 20px rgba(50,50,50,1)) drop-shadow(0 0 20px rgba(2,2,2,1));
+      transform: rotate(-35deg);
+    }
+
+    /* ══════════════════════════
+       LOADING SVG ANIMATION
+    ══════════════════════════ */
+    .loading svg polyline {
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .loading svg polyline#back  { fill: none; stroke: var(--accent2); }
+    .loading svg polyline#front {
+      fill: none;
+      stroke: var(--accent);
+      stroke-dasharray: 48, 144;
+      stroke-dashoffset: 192;
+      animation: dash_682 1.4s linear infinite;
+    }
+    @keyframes dash_682 {
+      72.5% { opacity: 0; }
+      to    { stroke-dashoffset: 0; }
+    }
+
+    /* ── Divider ── */
+    .divider {
+      display: flex; align-items: center; gap: 12px; margin: 20px 0;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+    .divider span { font-size: 10px; color: var(--dim); letter-spacing: 2px; text-transform: uppercase; }
+
+    /* ── Register link ── */
+    .register-link {
+      text-align: center; font-size: 12px; color: var(--muted);
+    }
+    .register-link a {
+      color: var(--text); font-weight: 700; text-decoration: underline;
+      text-underline-offset: 3px; text-decoration-color: var(--border2);
+      transition: text-decoration-color 0.2s;
+    }
+    .register-link a:hover { text-decoration-color: var(--muted); }
+
+    /* ── Footer ── */
+    .system-tag {
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+      z-index: 10; font-family: 'Barlow Condensed', sans-serif;
+      font-size: 10px; letter-spacing: 3px; color: var(--dim);
+      text-transform: uppercase; white-space: nowrap;
+    }
+    .footer-credit {
+      position: fixed; right: 20px; bottom: 14px; z-index: 10;
+      font-family: 'Exo 2', sans-serif; font-size: 11px;
+      color: rgba(255,255,255,0.3); letter-spacing: 1px;
+    }
+    .footer-credit span { color: rgba(255,255,255,0.6); font-weight: 600; }
+
+    /* ── Animations ── */
+    @keyframes slideUp   { from { opacity:0; transform:translateY(28px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes slideLeft { from { opacity:0; transform:translateX(-28px); } to { opacity:1; transform:translateX(0); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 760px) {
+      .info-panel { display: none; }
+      .login-wrap { justify-content: center; }
+      .card { max-width: 440px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <div class="grain"></div>
+  <div class="hud-grid"></div>
+
+  <!-- Brand bar -->
+  <div class="brand-bar">
+    <div class="brand-logo">⬡ AI-<span>DFIS</span></div>
+    <div class="brand-name">FITNESS INTELLIGENCE</div>
+    <div class="brand-badge">MODULE 01</div>
+  </div>
+
+  <!-- HUD corners -->
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br-c"></div>
+
+  <!-- Side labels -->
+  <div class="hud-side">
+    <div class="hud-item">LOGIN</div>
+    <div class="hud-item">AUTH</div>
+    <div class="hud-item">SECURED</div>
+  </div>
+
+  <!-- Main stage -->
+  <div class="stage">
+    <div class="login-wrap">
+
+      <!-- Left info panel -->
+      <div class="info-panel">
+        <div class="info-eyebrow">AI Driven Fitness Intelligence</div>
+        <h1>
+          Your Body.<br>
+          <em>Decoded.</em>
+        </h1>
+        <p>
+          Sign in to access your personalised machine-learning powered body fat predictions,
+          training splits, and goal-aligned recommendations.
+        </p>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-dot">⚡</div>
+            Real-time ML body fat prediction
+          </div>
+          <div class="feature-item">
+            <div class="feature-dot">🧬</div>
+            12+ biometric data points analysed
+          </div>
+          <div class="feature-item">
+            <div class="feature-dot">📊</div>
+            Full prediction history tracked
+          </div>
+          <div class="feature-item">
+            <div class="feature-dot">🎯</div>
+            Custom weekly workout splits
+          </div>
+        </div>
+      </div>
+
+      <!-- Login card -->
+      <div class="card">
+        <div class="card-accent"></div>
+
+        <div class="card-eyebrow">
+          <div class="eyebrow-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#d2494b" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <span class="eyebrow-text">Secure Access Terminal</span>
+        </div>
+
+        <h2>Sign <span>In</span></h2>
+        <p class="sub">Enter your credentials to access the fitness intelligence platform.</p>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}{% for m in messages %}
+            <div class="flash">⚠ {{ m }}</div>
+          {% endfor %}{% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('main.login') }}" id="login-form">
+          <div class="field">
+            <div class="field-label">Email Address</div>
+            <input class="input" type="email" name="email" placeholder="user@example.com" required>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Password</div>
+            <input class="input" type="password" name="password" placeholder="••••••••••••" required>
+          </div>
+
+          <div class="forgot-row">
+            <a href="{{ url_for('main.reset_password') }}" class="forgot-link">Forgot password?</a>
+          </div>
+
+          <button type="submit" class="styled-button" id="login-btn" onclick="handleLoginSubmit(this)">
+            <span id="login-label">Access Platform</span>
+            <span class="inner-button">
+              <!-- Loading SVG (hidden by default) -->
+              <span class="loading" id="login-loading" style="display:none; align-items:center; justify-content:center;">
+                <svg height="16" width="16" viewBox="0 0 48 48">
+                  <polyline id="back"  points="1,6 11,6 22,30 11,30 1,6"/>
+                  <polyline id="front" points="1,6 11,6 22,30 11,30 1,6"/>
+                </svg>
+              </span>
+              <!-- Arrow icon (shown by default) -->
+              <svg class="icon" id="login-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </span>
+          </button>
+        </form>
+
+        <div class="divider"><span>or</span></div>
+
+        <div class="register-link">
+          No account? <a href="{{ url_for('main.register') }}">Create one →</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="system-tag">AI DRIVEN FITNESS INTELLIGENCE SYSTEM</div>
+  <div class="footer-credit">developed by <span>Parth Tyagi</span></div>
+
+  <script>
+  /* ── Loading state on submit ── */
+  function handleLoginSubmit(btn) {
+    setTimeout(() => {
+      document.getElementById('login-label').textContent = 'Authenticating...';
+      document.getElementById('login-icon').style.display  = 'none';
+      document.getElementById('login-loading').style.display = 'flex';
+    }, 50);
+  }
+
+  /* ── Three.js background ── */
+  (function () {
+    const canvas   = document.getElementById('bg');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setClearColor(0x0a0a0a, 1);
+
+    const scene  = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 120);
+    camera.position.set(0, 0, 14);
+
+    /* ── Lights ── */
+    scene.add(new THREE.AmbientLight(0xffffff, 0.07));
+    const l1 = new THREE.PointLight(0xffffff, 2.5, 60); l1.position.set(7, 6, 8);  scene.add(l1);
+    const l2 = new THREE.PointLight(0x888888, 1.5, 50); l2.position.set(-8, -5, 6); scene.add(l2);
+    const l3 = new THREE.PointLight(0xd2494b, 0.8, 40); l3.position.set(0,  8, 4);  scene.add(l3);
+
+    /* ── Materials ── */
+    const darkMat  = () => new THREE.MeshPhongMaterial({ color: 0x222222, shininess: 200, specular: 0x444444 });
+    const greyMat  = () => new THREE.MeshPhongMaterial({ color: 0x333333, shininess: 300, specular: 0x666666, transparent: true, opacity: 0.9 });
+    const lightMat = () => new THREE.MeshPhongMaterial({ color: 0x555555, shininess: 400, specular: 0x999999, transparent: true, opacity: 0.8 });
+    const wireMat  = () => new THREE.MeshPhongMaterial({ color: 0x3a3a3a, wireframe: true, transparent: true, opacity: 0.14 });
+
+    /* ── Gym object builders ── */
+    function mkDumbbell(pMat) {
+      const g = new THREE.Group();
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8), darkMat());
+      h.rotation.z = Math.PI / 2; g.add(h);
+      [-0.38, -0.32, 0.32, 0.38].forEach(x => {
+        const p = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.065, 16), pMat());
+        p.rotation.z = Math.PI / 2; p.position.x = x; g.add(p);
+      });
+      return g;
+    }
+    function mkKettlebell(bMat) {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), bMat()));
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.03, 8, 16, Math.PI), lightMat());
+      handle.position.y = 0.27; handle.rotation.x = Math.PI; g.add(handle);
+      return g;
+    }
+    function mkPlate(pMat) {
+      const g = new THREE.Group(); const m = pMat();
+      g.add(new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.1, 8, 24), m));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.14, 12), m));
+      for (let i = 0; i < 4; i++) {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.06), m);
+        s.rotation.z = (i / 4) * Math.PI; g.add(s);
+      }
+      return g;
+    }
+    function mkBarbell() {
+      const g   = new THREE.Group();
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.4, 8), darkMat());
+      bar.rotation.z = Math.PI / 2; g.add(bar);
+      [-0.95, -0.82, 0.82, 0.95].forEach(x => {
+        const p = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.08, 16), greyMat());
+        p.rotation.z = Math.PI / 2; p.position.x = x; g.add(p);
+      });
+      return g;
+    }
+    function mkWireIco() { return new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 1), wireMat()); }
+
+    /* ── Scene objects ── */
+    const objs = [
+      { mesh: mkDumbbell(greyMat),    pos: [-8,  3.5, -3],  spd: [ 0.004,  0.006,  0.003] },
+      { mesh: mkDumbbell(lightMat),   pos: [ 8,  -2.5, -4], spd: [-0.005,  0.004,  0.006] },
+      { mesh: mkKettlebell(darkMat),  pos: [-5,  -4,   -2], spd: [ 0.005,  0.003, -0.004] },
+      { mesh: mkKettlebell(darkMat),  pos: [ 6,   4.5, -5], spd: [-0.003,  0.006,  0.005] },
+      { mesh: mkPlate(greyMat),       pos: [ 3,  -5,   -3], spd: [ 0.003,  0.005, -0.003] },
+      { mesh: mkPlate(lightMat),      pos: [-3.5, 5,   -6], spd: [-0.004, -0.003,  0.004] },
+      { mesh: mkBarbell(),            pos: [ 0,   7,  -10], spd: [ 0.002,  0.003,  0.002] },
+      { mesh: mkWireIco(),            pos: [ 9,   2,   -4], spd: [ 0.007,  0.005,  0.004] },
+      { mesh: mkWireIco(),            pos: [-10, -6,   -7], spd: [ 0.006,  0.007,  0.005] },
+    ];
+
+    objs.forEach(o => {
+      o.mesh.position.set(...o.pos);
+      o.mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      scene.add(o.mesh);
+    });
+
+    /* ── Particle field ── */
+    const pGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(450 * 3);
+    for (let i = 0; i < 450 * 3; i++) pPos[i] = (Math.random() - 0.5) * 55;
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMesh = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0x444444, size: 0.024, transparent: true, opacity: 0.55 }));
+    scene.add(pMesh);
+
+    /* ── Mouse tracking ── */
+    let mx = 0, my = 0;
+    document.addEventListener('mousemove', e => {
+      mx = (e.clientX / innerWidth  - 0.5) * 2;
+      my = (e.clientY / innerHeight - 0.5) * 2;
+    });
+
+    /* ── Render loop ── */
+    let t = 0;
+    (function animate() {
+      requestAnimationFrame(animate); t += 0.009;
+      objs.forEach(o => {
+        o.mesh.rotation.x += o.spd[0];
+        o.mesh.rotation.y += o.spd[1];
+        o.mesh.rotation.z += o.spd[2];
+      });
+      pMesh.rotation.y += 0.0004;
+      camera.position.x += (mx * 0.7 - camera.position.x) * 0.03;
+      camera.position.y += (-my * 0.5 - camera.position.y) * 0.03;
+      camera.lookAt(0, 0, 0);
+      l1.position.x = Math.sin(t * 0.4) * 8;
+      l1.position.y = Math.cos(t * 0.3) * 6;
+      renderer.render(scene, camera);
+    })();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  })();
+  </script>
+</body>
+</html>

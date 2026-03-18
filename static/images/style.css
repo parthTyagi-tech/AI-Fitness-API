@@ -1,0 +1,132 @@
+
+        body {
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: url("{{ url_for('static', filename='images/bg.jpg') }}") no-repeat center center fixed;
+            background-size: cover;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 30px 15px;
+        }
+
+        .login {
+            width: 100%;
+            max-width: 950px;
+            padding: 35px 30px;
+            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+        }
+
+        .login h1 {
+            text-align: center;
+            color: white;
+            font-size: 42px;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            background: rgba(220, 220, 220, 0.18);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            color: white;
+            font-size: 17px;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.78);
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border: 1px solid rgba(255, 255, 255, 0.65);
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.22);
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.3s ease;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.32);
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 900px) {
+            form {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .login {
+                padding: 25px 18px;
+            }
+
+            .login h1 {
+                font-size: 28px;
+                margin-bottom: 22px;
+            }
+
+            form {
+                grid-template-columns: 1fr;
+            }
+        }
+<body>
+    <div class="login">
+        <h1>AI DRIVEN FITNESS INTELLIGENCE SYSTEM</h1>
+
+        <form action="{{ url_for('predict') }}" method="post">
+            <input type="number" name="age" placeholder="Age" required>
+            <input type="number" step="any" name="height" placeholder="Height (cm)" required>
+            <input type="text" name="gender" placeholder="Gender" required>
+
+            <input type="number" step="any" name="weight" placeholder="Weight (kg)" required>
+            <input type="text" name="activity_level" placeholder="Activity Level" required>
+            <input type="number" name="workouts_per_week" placeholder="Workouts / Week" required>
+
+            <input type="number" step="any" name="waist_cm" placeholder="Waist (cm)" required>
+            <input type="number" step="any" name="neck_cm" placeholder="Neck (cm)" required>
+            <input type="number" step="any" name="hip_cm" placeholder="Hip (cm)" required>
+
+            <input type="number" step="any" name="sleep_hours" placeholder="Sleep Hours" required>
+            <input type="number" step="any" name="daily_calories" placeholder="Daily Calories" required>
+            <input type="text" name="fitness_goal" placeholder="Fitness Goal" required>
+
+            <button type="submit" class="full-width">Predict</button>
+        </form>
+    </div>
+</body>
+</html>

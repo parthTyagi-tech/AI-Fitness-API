@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>404 · Page Not Found · ADFIS</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Syne:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--v1:#6d28d9;--v2:#8b5cf6;--v3:#a78bfa;--fx:#d946ef;--txt:#ede9fe;--dim:#7c6fa0;--glass:rgba(4,0,13,.88)}
+html,body{height:100%;cursor:none;background:#000}
+body{font-family:'Syne',sans-serif;color:var(--txt);display:flex;align-items:center;justify-content:center;min-height:100vh;overflow:hidden}
+.orb{position:fixed;border-radius:50%;pointer-events:none;filter:blur(100px);opacity:.16}
+.o1{width:600px;height:600px;background:radial-gradient(circle,#6d28d9,transparent);top:-150px;left:-100px;animation:flt 14s ease-in-out infinite}
+.o2{width:500px;height:500px;background:radial-gradient(circle,#d946ef,transparent);bottom:-100px;right:-100px;animation:flt 11s ease-in-out infinite reverse;animation-delay:-4s}
+@keyframes flt{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,-40px)}}
+.grid{position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(109,40,217,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(109,40,217,.04) 1px,transparent 1px);background-size:72px 72px}
+.box{position:relative;z-index:5;text-align:center;padding:60px 40px}
+.num{font-family:'Bebas Neue',sans-serif;font-size:clamp(140px,20vw,200px);line-height:.85;letter-spacing:-5px;background:linear-gradient(135deg,var(--v1),var(--v2),var(--fx));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.85}50%{opacity:1}}
+.tag{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--fx);text-transform:uppercase;margin-bottom:16px}
+.msg{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,4vw,44px);letter-spacing:2px;margin-bottom:12px}
+.sub{color:var(--dim);font-size:15px;line-height:1.7;margin-bottom:36px}
+.btn{display:inline-block;padding:13px 30px;border-radius:6px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;text-decoration:none;transition:.35s ease;box-shadow:0 0 28px rgba(109,40,217,.4)}
+.btn:hover{transform:translateY(-3px);box-shadow:0 0 45px rgba(139,92,246,.7)}
+.credit{position:fixed;right:18px;bottom:14px;font-family:'Space Mono',monospace;font-size:11px;color:rgba(255,255,255,.3)}
+.credit b{color:var(--v3)}
+</style>
+</head>
+<body>
+<div class="orb o1"></div><div class="orb o2"></div><div class="grid"></div>
+<div class="box">
+  <div class="tag">Error 404</div>
+  <div class="num">404</div>
+  <h1 class="msg">Page Not Found</h1>
+  <p class="sub">The page you're looking for doesn't exist<br>or has been moved.</p>
+  <a href="{{ url_for('main.home') }}" class="btn">← RETURN HOME</a>
+</div>
+<div class="credit">Developed by <b>Parth Tyagi</b></div>
+</body>
+</html>

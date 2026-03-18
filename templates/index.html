@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Driven Fitness Intelligence System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg:     #0a0a0a;
+      --bg2:    #111111;
+      --bg3:    #181818;
+      --card:   #121212;
+      --card2:  #161616;
+      --border: #222222;
+      --border2:#2e2e2e;
+      --text:   #f0f0f0;
+      --muted:  #888888;
+      --dim:    #555555;
+      --accent: #d2494b;
+      --accent2:#e0464b33;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Exo 2',sans-serif; color:var(--text); background:var(--bg); min-height:100vh; overflow-x:hidden; }
+
+    #bg { position:fixed; inset:0; z-index:0; }
+    .grain {
+      position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.03;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size:200px 200px;
+    }
+    .hud-grid {
+      position:fixed; inset:0; z-index:1; pointer-events:none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size:48px 48px;
+    }
+
+    /* ── Nav ── */
+    .nav {
+      position:sticky; top:0; z-index:20;
+      padding:0 28px;
+      background:rgba(10,10,10,0.97);
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:stretch; justify-content:space-between;
+      backdrop-filter:blur(20px);
+    }
+    .nav-brand { display:flex; flex-direction:column; justify-content:center; padding:12px 0; }
+    .nav-title { font-family:'Barlow Condensed',sans-serif; font-size:10px; letter-spacing:3.5px; color:var(--dim); text-transform:uppercase; font-weight:700; }
+    .nav-subtitle { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900; letter-spacing:1px; color:var(--text); line-height:1; }
+    .nav-subtitle span { color:var(--accent); }
+    .nav-right { display:flex; align-items:center; gap:10px; padding:12px 0; }
+    .user-chip { padding:7px 12px; border:1px solid var(--border); border-radius:6px; background:rgba(255,255,255,0.03); font-size:12px; color:var(--muted); }
+    .user-chip strong { color:var(--text); }
+
+    /* Nav buttons using styled-button system */
+    .nav-btn {
+      padding:8px 16px; border-radius:9999px;
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:13px; font-weight:700; letter-spacing:2px;
+      text-decoration:none; text-transform:uppercase;
+      transition:all 0.2s ease; cursor:pointer;
+      display:inline-flex; align-items:center;
+    }
+    .nav-btn.primary {
+      background:linear-gradient(to bottom, #1e1e1e, #2a2a2a);
+      color:#f0f0f0; border:1px solid #333;
+      box-shadow:0 2px 4px rgba(0,0,0,0.8);
+    }
+    .nav-btn.primary:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.6); }
+    .nav-btn.ghost { color:var(--muted); border:1px solid var(--border); border-radius:9999px; }
+    .nav-btn.ghost:hover { color:var(--text); border-color:var(--border2); }
+
+    /* ── Shell ── */
+    .shell { position:relative; z-index:5; max-width:1280px; margin:0 auto; padding:28px 20px 80px; }
+
+    /* ── Hero grid ── */
+    .hero-grid { display:grid; grid-template-columns:1.1fr 0.9fr; gap:18px; margin-bottom:18px; }
+
+    /* ── Glass cards ── */
+    .glass-card {
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:12px;
+      box-shadow:
+        0 4px 24px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+      backdrop-filter:blur(20px);
+    }
+
+    /* ── Hero card ── */
+    .hero-card {
+      padding:30px;
+      animation:slideUp 0.8s cubic-bezier(0.16,1,0.3,1) both;
+      position:relative; overflow:hidden;
+    }
+    .hero-card::after {
+      content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    }
+
+    .system-badge {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:5px 12px; border-radius:999px;
+      border:1px solid var(--border2);
+      background:rgba(255,255,255,0.03);
+      font-size:10px; letter-spacing:3px;
+      color:var(--dim); font-weight:700; text-transform:uppercase;
+      margin-bottom:16px;
+    }
+    .system-badge::before { content:'●'; font-size:6px; color:var(--accent); animation:blink 1.5s ease-in-out infinite; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+    .hero-card h1 {
+      font-family:'Barlow Condensed',sans-serif;
+      font-size:46px; font-weight:900; line-height:1;
+      letter-spacing:1px; margin-bottom:12px; text-transform:uppercase;
+    }
+    .hero-card h1 span { color:var(--accent); }
+    .hero-card p { color:var(--muted); font-size:14px; line-height:1.7; max-width:580px; }
+
+    /* ── Stats mini grid ── */
+    .stats-mini { display:grid; grid-template-columns:1fr 1fr; gap:12px; animation:slideUp 1s cubic-bezier(0.16,1,0.3,1) both; }
+    .stat-card {
+      padding:20px; position:relative; overflow:hidden;
+      animation:slideUp 1s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    .stat-card::before { content:''; position:absolute; top:0; left:0; width:2px; height:100%; background:linear-gradient(180deg, var(--border2), transparent); }
+    .stat-icon { font-size:20px; margin-bottom:10px; }
+    .stat-label { font-size:9px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; font-weight:600; margin-bottom:6px; }
+    .stat-value { font-family:'Barlow Condensed',sans-serif; font-size:24px; font-weight:800; color:var(--text); margin-bottom:4px; }
+    .stat-desc { font-size:11px; color:var(--muted); line-height:1.5; }
+
+    /* ── Form panel ── */
+    .form-panel {
+      padding:28px 30px;
+      animation:slideUp 1.1s cubic-bezier(0.16,1,0.3,1) both;
+      position:relative;
+    }
+    .panel-header { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:26px; flex-wrap:wrap; }
+    .panel-eyebrow { font-family:'Barlow Condensed',sans-serif; font-size:10px; letter-spacing:3px; color:var(--dim); font-weight:700; text-transform:uppercase; margin-bottom:6px; }
+    .panel-title { font-family:'Barlow Condensed',sans-serif; font-size:30px; font-weight:900; text-transform:uppercase; letter-spacing:1px; }
+    .panel-desc { color:var(--muted); font-size:13px; line-height:1.6; max-width:560px; }
+
+    /* ── Form grid ── */
+    .form-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+
+    .field { display:flex; flex-direction:column; gap:8px; }
+    .field-label {
+      display:flex; align-items:center; gap:6px;
+      font-size:10px; letter-spacing:2px; color:var(--dim);
+      font-weight:600; text-transform:uppercase;
+    }
+    .field-label::before { content:''; display:block; width:10px; height:1px; background:var(--border2); }
+
+    /* ── Input (neumorphic dark) ── */
+    .field input, .field select {
+      width:100%; min-height:42px;
+      color:#fff; outline:none; transition:0.35s;
+      padding:0px 14px;
+      background-color:#1a1a1a;
+      border-radius:6px; border:1px solid var(--border);
+      font-family:'Exo 2',sans-serif; font-size:13px;
+      box-shadow:6px 6px 10px rgba(0,0,0,1), 1px 1px 10px rgba(255,255,255,0.03);
+    }
+    .field input::placeholder { color:#444; }
+    .field select option { background:#1a1a1a; color:var(--text); }
+    .field input:focus, .field select:focus {
+      transform:scale(1.02);
+      border-color:var(--border2);
+      box-shadow:
+        6px 6px 10px rgba(0,0,0,1),
+        1px 1px 10px rgba(255,255,255,0.05),
+        inset 2px 2px 10px rgba(0,0,0,1),
+        inset -1px -1px 5px rgba(255,255,255,0.03);
+    }
+
+    .full { grid-column:1 / -1; }
+
+    /* ── Section divider ── */
+    .section-divider { display:flex; align-items:center; gap:12px; grid-column:1 / -1; margin:4px 0; }
+    .section-divider::before,.section-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+    .section-divider span { font-family:'Barlow Condensed',sans-serif; font-size:10px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; white-space:nowrap; }
+
+    /* ══════════════════════════
+       SUBMIT BUTTON (styled-button)
+    ══════════════════════════ */
+    .styled-button {
+      position:relative; padding:1rem 2rem;
+      font-size:1.05rem; font-weight:bold; color:#fff;
+      background:linear-gradient(to bottom, #171717, #242424);
+      border-radius:9999px; cursor:pointer;
+      box-shadow:0 2px 4px rgba(0,0,0,1), 0 10px 20px rgba(0,0,0,0.4);
+      transition:all 0.2s ease;
+      display:inline-flex; align-items:center; justify-content:center;
+      border:1px solid #292929; width:100%;
+      font-family:'Barlow Condensed',sans-serif;
+      letter-spacing:3px; text-transform:uppercase;
+    }
+    .styled-button::before {
+      content:""; position:absolute;
+      top:-2px; right:-1px; bottom:-1px; left:-1px;
+      background:linear-gradient(to bottom, #292929, #000);
+      z-index:-1; border-radius:9999px; transition:all 0.2s ease; opacity:1;
+    }
+    .styled-button:active { transform:translateY(2px); box-shadow:0 1px 2px rgba(0,0,0,1), 0 5px 10px rgba(0,0,0,0.4); }
+    .styled-button:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.8); }
+    .styled-button .inner-button {
+      position:relative; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(to bottom, #171717, #242424);
+      width:38px; height:38px; margin-left:12px; border-radius:50%;
+      box-shadow:0 0 1px rgba(0,0,0,1); border:1px solid #252525;
+      transition:all 0.2s ease; flex-shrink:0;
+    }
+    .styled-button .inner-button::before {
+      content:""; position:absolute; top:-2px; right:-1px; bottom:-1px; left:-1px;
+      background:linear-gradient(to bottom, #292929, #000); z-index:-1;
+      border-radius:9999px; transition:all 0.2s ease; opacity:1;
+    }
+    .styled-button .inner-button .icon {
+      filter:drop-shadow(0 10px 20px rgba(26,25,25,0.9)) drop-shadow(0 0 4px rgba(0,0,0,1));
+      transition:all 0.4s ease-in-out;
+    }
+    .styled-button:hover .inner-button .icon {
+      filter:drop-shadow(0 10px 20px rgba(50,50,50,1)) drop-shadow(0 0 20px rgba(2,2,2,1));
+      transform:rotate(-35deg);
+    }
+
+    /* Loading polyline animation */
+    .loading svg polyline { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+    .loading svg polyline#back { fill:none; stroke:var(--accent2); }
+    .loading svg polyline#front {
+      fill:none; stroke:var(--accent);
+      stroke-dasharray:48,144; stroke-dashoffset:192;
+      animation:dash_682 1.4s linear infinite;
+    }
+    @keyframes dash_682 { 72.5% { opacity:0; } to { stroke-dashoffset:0; } }
+
+    /* ── Footer ── */
+    .system-tag { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:10; font-family:'Barlow Condensed',sans-serif; font-size:10px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; white-space:nowrap; }
+    .footer-credit { position:fixed; right:20px; bottom:14px; z-index:10; font-family:'Exo 2',sans-serif; font-size:11px; color:rgba(255,255,255,0.3); letter-spacing:1px; }
+    .footer-credit span { color:rgba(255,255,255,0.6); font-weight:600; }
+
+    @keyframes slideUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+
+    @media(max-width:1050px) { .hero-grid { grid-template-columns:1fr; } .form-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:700px) { .form-grid { grid-template-columns:1fr; } .hero-card h1 { font-size:34px; } }
+  </style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <div class="grain"></div>
+  <div class="hud-grid"></div>
+
+  <nav class="nav">
+    <div class="nav-brand">
+      <div class="nav-title">AI Driven Fitness Intelligence System</div>
+      <div class="nav-subtitle">BODY<span>INTEL</span> PLATFORM</div>
+    </div>
+    <div class="nav-right">
+      <div class="user-chip">
+        Operative: <strong>{{ user.name }}</strong> &nbsp;·&nbsp; {{ user.email }}
+      </div>
+      <a href="{{ url_for('main.dashboard') }}" class="nav-btn primary">Dashboard</a>
+      <a href="{{ url_for('main.logout') }}" class="nav-btn ghost">Logout</a>
+    </div>
+  </nav>
+
+  <div class="shell">
+    <!-- Hero -->
+    <div class="hero-grid">
+      <div class="glass-card hero-card">
+        <div class="system-badge">AI DRIVEN FITNESS INTELLIGENCE SYSTEM</div>
+        <h1>Train Smarter With<br><span>AI Precision</span></h1>
+        <p>Enter your biometric and activity data for a machine-learning powered body fat prediction. Personalized training splits, cardio guidance, and goal-specific recommendations are generated instantly.</p>
+      </div>
+
+      <div class="stats-mini">
+        <div class="glass-card stat-card">
+          <div class="stat-icon"></div>
+          <div class="stat-label">Processing</div>
+          <div class="stat-value">Real-Time</div>
+          <div class="stat-desc">ML predictions generated in milliseconds from your biometric inputs.</div>
+        </div>
+        <div class="glass-card stat-card">
+          <div class="stat-icon"></div>
+          <div class="stat-label">Data Points</div>
+          <div class="stat-value">12+</div>
+          <div class="stat-desc">Biometric and lifestyle variables analyzed for accurate results.</div>
+        </div>
+        <div class="glass-card stat-card">
+          <div class="stat-icon"></div>
+          <div class="stat-label">History</div>
+          <div class="stat-value">Auto-Save</div>
+          <div class="stat-desc">Every prediction stored to your profile for progress tracking.</div>
+        </div>
+        <div class="glass-card stat-card">
+          <div class="stat-icon"></div>
+          <div class="stat-label">Split Plans</div>
+          <div class="stat-value">Custom</div>
+          <div class="stat-desc">Weekly workout splits tailored to your body fat category and goals.</div>
+        </div>
+      </div>
+    </div>
+
+ <!-- Form Panel -->
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    {% for m in messages %}
+      <div style="margin-bottom:16px; padding:12px 16px; border-left:3px solid #d2494b; background:rgba(210,73,75,0.1); border-radius:6px; color:#ff9a9a; font-size:13px;">
+        ⚠ {{ m }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="glass-card form-panel">
+    <div class="glass-card form-panel">
+      
+      <div class="panel-header">
+        <div>
+          <div class="panel-eyebrow">◈ Intelligence Input Terminal</div>
+          <div class="panel-title">Biometric Analysis Form</div>
+        </div>
+        <div class="panel-desc">Fill all fields accurately for optimal prediction quality. Your profile data auto-populates saved values.</div>
+      </div>
+
+      <form action="{{ url_for('main.predict') }}" method="post" id="predict-form">
+        <div class="form-grid">
+          <div class="section-divider"><span>Physical Profile</span></div>
+
+          <div class="field">
+            <div class="field-label">Age (years)</div>
+            <input type="number" name="age" placeholder="e.g. 28" value="{{ profile.age if profile else '' }}" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Height (cm)</div>
+            <input type="number" step="any" name="height" placeholder="e.g. 175" value="{{ profile.height if profile else '' }}" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Gender</div>
+            <select name="gender" required>
+              <option value="">Select Gender</option>
+              <option value="male" {% if profile and profile.gender == 'male' %}selected{% endif %}>Male</option>
+              <option value="female" {% if profile and profile.gender == 'female' %}selected{% endif %}>Female</option>
+            </select>
+          </div>
+
+          <div class="section-divider"><span>Measurements</span></div>
+
+          <div class="field">
+            <div class="field-label">Weight (kg)</div>
+            <input type="number" step="any" name="weight" placeholder="e.g. 80" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Waist (cm)</div>
+            <input type="number" step="any" name="waist_cm" placeholder="e.g. 85" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Neck (cm)</div>
+            <input type="number" step="any" name="neck_cm" placeholder="e.g. 38" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Hip (cm)</div>
+            <input type="number" step="any" name="hip_cm" placeholder="e.g. 95" required>
+          </div>
+
+          <div class="section-divider"><span>Lifestyle & Activity</span></div>
+
+          <div class="field">
+            <div class="field-label">Activity Level</div>
+            <select name="activity_level" required>
+              <option value="">Select Level</option>
+              <option value="sedentary" {% if profile and profile.activity == 'sedentary' %}selected{% endif %}>Sedentary</option>
+              <option value="light"     {% if profile and profile.activity == 'light'     %}selected{% endif %}>Light</option>
+              <option value="moderate"  {% if profile and profile.activity == 'moderate'  %}selected{% endif %}>Moderate</option>
+              <option value="active"    {% if profile and profile.activity == 'active'    %}selected{% endif %}>Active</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label">Workouts / Week</div>
+            <input type="number" name="workouts_per_week" placeholder="e.g. 4" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Sleep Hours / Day</div>
+            <input type="number" step="any" name="sleep_hours" placeholder="e.g. 7.5" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Daily Calories</div>
+            <input type="number" step="any" name="daily_calories" placeholder="e.g. 2200" required>
+          </div>
+          <div class="field">
+            <div class="field-label">Fitness Goal</div>
+            <select name="fitness_goal" required>
+              <option value="">Select Goal</option>
+              <option value="fat_loss"    {% if profile and profile.goal == 'fat_loss'    %}selected{% endif %}>Fat Loss</option>
+              <option value="muscle_gain" {% if profile and profile.goal == 'muscle_gain' %}selected{% endif %}>Muscle Gain</option>
+              <option value="maintenance" {% if profile and profile.goal == 'maintenance' %}selected{% endif %}>Maintenance</option>
+            </select>
+          </div>
+<div class="section-divider"><span>Training Preference</span></div>
+
+          <div class="field full">
+            <div class="field-label">Where will you train?</div>
+            <select name="exercise_location" required>
+              <option value="">Select Location</option>
+              <option value="gym"  {% if profile and profile.exercise_location == 'gym'  %}selected{% endif %}>Gym — Equipment Available</option>
+              <option value="home" {% if profile and profile.exercise_location == 'home' %}selected{% endif %}>Home — Bodyweight / Minimal Equipment</option>
+            </select>
+          </div>
+          <div class="full">
+            <button type="submit" class="styled-button" id="submit-btn" onclick="handleSubmit(this)">
+              <span id="submit-label">▶ Execute Prediction Analysis</span>
+              <span class="inner-button">
+                <span class="loading" id="submit-loading" style="display:none;align-items:center;justify-content:center;">
+                  <svg height="18" width="18" viewBox="0 0 48 48">
+                    <polyline id="back"  points="1,6 11,6 22,30 11,30 1,6"/>
+                    <polyline id="front" points="1,6 11,6 22,30 11,30 1,6"/>
+                  </svg>
+                </span>
+                <svg class="icon" id="submit-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="system-tag">AI DRIVEN FITNESS INTELLIGENCE SYSTEM</div>
+  <div class="footer-credit">developed by <span>Parth Tyagi</span></div>
+
+  <script>
+  function handleSubmit(btn) {
+    setTimeout(() => {
+      document.getElementById('submit-label').textContent = 'Analyzing...';
+      document.getElementById('submit-icon').style.display = 'none';
+      document.getElementById('submit-loading').style.display = 'flex';
+    }, 50);
+  }
+
+  (function() {
+    const canvas = document.getElementById('bg');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setClearColor(0x0a0a0a, 1);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 120);
+    camera.position.set(0, 0, 16);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.07));
+    const l1 = new THREE.PointLight(0xffffff, 2.5, 60); l1.position.set(8, 6, 8); scene.add(l1);
+    const l2 = new THREE.PointLight(0x888888, 1.5, 50); l2.position.set(-8, -6, 6); scene.add(l2);
+    const l3 = new THREE.PointLight(0xd2494b, 0.8, 40); l3.position.set(0, -10, 4); scene.add(l3);
+
+    const darkMat  = () => new THREE.MeshPhongMaterial({ color:0x1e1e1e, shininess:200, specular:0x444444 });
+    const greyMat  = () => new THREE.MeshPhongMaterial({ color:0x2e2e2e, shininess:300, specular:0x666666, transparent:true, opacity:0.9 });
+    const lightMat = () => new THREE.MeshPhongMaterial({ color:0x4a4a4a, shininess:400, specular:0x999999, transparent:true, opacity:0.85 });
+    const wireMat  = () => new THREE.MeshPhongMaterial({ color:0x333333, wireframe:true, transparent:true, opacity:0.15 });
+
+    function mkDumbbell(pMat) {
+      const g = new THREE.Group();
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.6,8), darkMat());
+      h.rotation.z = Math.PI/2; g.add(h);
+      [-0.38,-0.32,0.32,0.38].forEach(x => { const p=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.065,16),pMat()); p.rotation.z=Math.PI/2; p.position.x=x; g.add(p); });
+      return g;
+    }
+    function mkKettlebell(bMat) {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.24,16,16), bMat()));
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.15,0.03,8,16,Math.PI), lightMat());
+      handle.position.y=0.27; handle.rotation.x=Math.PI; g.add(handle);
+      return g;
+    }
+    function mkPlate(pMat) {
+      const g=new THREE.Group(); const m=pMat();
+      g.add(new THREE.Mesh(new THREE.TorusGeometry(0.42,0.1,8,24), m));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.14,12), m));
+      for(let i=0;i<4;i++){const s=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.6,0.06),m);s.rotation.z=(i/4)*Math.PI;g.add(s);}
+      return g;
+    }
+    function mkBarbell() {
+      const g=new THREE.Group();
+      const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,2.4,8), darkMat());
+      bar.rotation.z=Math.PI/2; g.add(bar);
+      [-0.95,-0.82,0.82,0.95].forEach(x=>{const p=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.24,0.08,16),greyMat());p.rotation.z=Math.PI/2;p.position.x=x;g.add(p);});
+      return g;
+    }
+    function mkWireIco() { return new THREE.Mesh(new THREE.IcosahedronGeometry(0.6,1), wireMat()); }
+
+    const objs = [
+      { mesh:mkDumbbell(greyMat),   pos:[-9,4,-5],    spd:[0.004,0.007,0.003] },
+      { mesh:mkDumbbell(lightMat),  pos:[9,-3,-6],    spd:[-0.005,0.004,0.006] },
+      { mesh:mkKettlebell(darkMat), pos:[-6,-5,-3],   spd:[0.005,0.004,-0.004] },
+      { mesh:mkKettlebell(darkMat), pos:[7,5,-7],     spd:[-0.004,0.006,0.005] },
+      { mesh:mkPlate(greyMat),      pos:[4,-6,-4],    spd:[0.003,0.006,-0.003] },
+      { mesh:mkPlate(lightMat),     pos:[-4,6,-8],    spd:[-0.004,-0.003,0.005] },
+      { mesh:mkBarbell(),           pos:[0,8,-10],    spd:[0.002,0.003,0.002] },
+      { mesh:mkBarbell(),           pos:[-10,-2,-9],  spd:[0.003,0.004,0.001] },
+      { mesh:mkWireIco(),           pos:[10,2,-4],    spd:[0.007,0.005,0.004] },
+      { mesh:mkWireIco(),           pos:[-11,-7,-8],  spd:[0.006,0.007,0.005] },
+    ];
+
+    objs.forEach(o => { o.mesh.position.set(...o.pos); o.mesh.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI); scene.add(o.mesh); });
+
+    const pGeo=new THREE.BufferGeometry();
+    const pPos=new Float32Array(500*3);
+    for(let i=0;i<500*3;i++) pPos[i]=(Math.random()-0.5)*60;
+    pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+    const pMesh=new THREE.Points(pGeo,new THREE.PointsMaterial({color:0x444444,size:0.025,transparent:true,opacity:0.5}));
+    scene.add(pMesh);
+
+    let mx=0,my=0,scrollY=0;
+    document.addEventListener('mousemove',e=>{mx=(e.clientX/innerWidth-0.5)*2;my=(e.clientY/innerHeight-0.5)*2;});
+    window.addEventListener('scroll',()=>{scrollY=window.scrollY;});
+
+    let t=0;
+    (function animate(){
+      requestAnimationFrame(animate); t+=0.008;
+      objs.forEach(o=>{o.mesh.rotation.x+=o.spd[0];o.mesh.rotation.y+=o.spd[1];o.mesh.rotation.z+=o.spd[2];});
+      pMesh.rotation.y+=0.0003;
+      camera.position.x+=(mx*0.6-camera.position.x)*0.02;
+      camera.position.y+=(-my*0.4+scrollY*0.002-camera.position.y)*0.02;
+      camera.lookAt(0,0,0);
+      l1.position.x=Math.sin(t*0.5)*10; l1.position.y=Math.cos(t*0.4)*8;
+      l2.position.x=Math.cos(t*0.4)*10; l2.position.y=Math.sin(t*0.3)*8;
+      renderer.render(scene,camera);
+    })();
+
+    window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+  })();
+  </script>
+</body>
+</html>
