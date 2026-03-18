@@ -17,6 +17,9 @@ load_dotenv()
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    @app.route('/')
+    def home():
+        return "AI Fitness API is running 🚀"
 
     # ── Config ────────────────────────────────────────────────────────────────
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
@@ -64,6 +67,7 @@ def create_app() -> Flask:
         db.create_all()
 
     return app
+
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
