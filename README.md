@@ -29,7 +29,8 @@
 
 ### 🔐 Login — Secure Access Terminal
 <!-- Replace the path below with your actual screenshot -->
-![Login Page](assets/screenshots/login.png)
+![Login Page](<img width="1502" height="913" alt="Screenshot 2026-03-19 024546" src="https://github.com/user-attachments/assets/1c913664-8143-47b3-9102-5f0232c55c65" />
+)
 
 ### 📝 Register — Deploy Your Profile
 ![Register Page](assets/screenshots/register.png)
