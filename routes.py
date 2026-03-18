@@ -22,8 +22,7 @@ main = Blueprint('main', __name__)
 # ── Home ──────────────────────────────────────────────────────────────────────
 @main.route('/')
 def home():
-    return "AI Fitness API is running 🚀"
-
+    return render_template('home.html')
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
