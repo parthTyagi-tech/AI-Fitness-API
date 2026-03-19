@@ -9,7 +9,7 @@ from flask import Flask
 import joblib
 from dotenv import load_dotenv
 
-from extensions import db, login_manager
+from extensions import db, login_manager, oauth
 
 # Load .env file (works in dev; on Render/Railway you set env vars in dashboard)
 load_dotenv()
@@ -17,7 +17,6 @@ load_dotenv()
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    
 
     # ── Config ────────────────────────────────────────────────────────────────
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
@@ -31,6 +30,10 @@ def create_app() -> Flask:
         'DATABASE_URL', 'sqlite:///database.db'
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # ── Google OAuth config ───────────────────────────────────────────────────
+    app.config['GOOGLE_CLIENT_ID']     = os.environ.get('GOOGLE_CLIENT_ID', '')
+    app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
     # ── Load ML model once at startup ────────────────────────────────────────
     model_path = os.path.join(os.path.dirname(__file__), 'models', 'gym_ai_bodyfat_model.pkl')
@@ -48,6 +51,15 @@ def create_app() -> Flask:
     login_manager.login_view = 'main.login'
     login_manager.login_message = 'Please log in to access this page.'
     login_manager.login_message_category = 'info'
+
+    oauth.init_app(app)
+    oauth.register(
+        name='google',
+        client_id=app.config['GOOGLE_CLIENT_ID'],
+        client_secret=app.config['GOOGLE_CLIENT_SECRET'],
+        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile'},
+    )
 
     # ── User loader ───────────────────────────────────────────────────────────
     from db_models import User
@@ -67,10 +79,8 @@ def create_app() -> Flask:
     return app
 
 
-
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     flask_app = create_app()
-    # debug=False in production — set DEBUG=true in .env for local dev only
     debug_mode = os.environ.get('DEBUG', 'false').lower() == 'true'
     flask_app.run(debug=debug_mode)

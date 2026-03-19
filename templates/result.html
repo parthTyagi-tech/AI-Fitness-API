@@ -188,18 +188,35 @@
       <div class="nav-module">ANALYSIS <span>RESULTS</span></div>
     </div>
     <div class="nav-right">
-      <a href="{{ url_for('main.fitness_form') }}" class="styled-button">
-        ← New Analysis
-        <span class="inner-button">
-          <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 5v14M5 12l7 7 7-7"/>
-          </svg>
-        </span>
-      </a>
+      {% if is_guest %}
+        <a href="{{ url_for('main.register', ref=ref) }}" class="styled-button" style="background:linear-gradient(to bottom,#7a1e1f,#a02527);border-color:#a02527;">
+          💾 Save Results — Sign Up Free
+          <span class="inner-button"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+        </a>
+      {% else %}
+        <a href="{{ url_for('main.fitness_form') }}" class="styled-button">
+          ← New Analysis
+          <span class="inner-button"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg></span>
+        </a>
+      {% endif %}
+      <button onclick="shareResult()" class="styled-button" style="width:auto;padding:0.7rem 1.2rem;">
+        📤 Share
+      </button>
     </div>
   </nav>
 
   <div class="shell">
+    {% if is_guest %}
+    <div style="margin-bottom:18px;background:linear-gradient(90deg,rgba(210,73,75,0.15),rgba(210,73,75,0.05));border:1px solid rgba(210,73,75,0.3);border-radius:12px;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;letter-spacing:1px;margin-bottom:4px;">🎯 Love your results? Save them & track progress!</div>
+        <div style="font-size:13px;color:var(--muted);">Create a free account to save this prediction, track your body fat over time, and get personalized progress insights.</div>
+      </div>
+      <a href="{{ url_for('main.register', ref=ref) }}" style="padding:12px 24px;background:var(--accent);color:#fff;border-radius:999px;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;text-decoration:none;white-space:nowrap;transition:all 0.2s;" onmouseover="this.style.background='#bf3e40'" onmouseout="this.style.background='var(--accent)'">
+        Create Free Account →
+      </a>
+    </div>
+    {% endif %}
     <!-- Header -->
     <div class="glass-card result-header">
       <div>
@@ -337,10 +354,46 @@
     </div>
   </div>
 
+  <!-- Share Modal -->
+  <div id="share-modal" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);align-items:center;justify-content:center;">
+    <div style="background:#141414;border:1px solid #2e2e2e;border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;margin-bottom:8px;">Share Your Results 📤</div>
+      <div style="color:#888;font-size:13px;margin-bottom:24px;">Challenge your friends to beat your body fat score!</div>
+      <div style="background:#0a0a0a;border:1px solid #222;border-radius:10px;padding:20px;margin-bottom:20px;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:900;color:#f0f0f0;">{{ bf_pct }}%</div>
+        <div style="color:#4a9a6a;font-size:14px;font-weight:600;">Body Fat · {{ notes.bf_category }}</div>
+        <div style="color:#666;font-size:12px;margin-top:8px;">{{ gender|title }}, {{ age }} yrs, {{ height }}cm, {{ weight }}kg</div>
+      </div>
+      <div id="share-msg" style="color:#4a9a6a;font-size:12px;margin-bottom:16px;display:none;">✓ Copied to clipboard!</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+        <button onclick="copyShareText()" style="padding:10px 18px;background:#1e1e1e;border:1px solid #333;border-radius:8px;color:#f0f0f0;cursor:pointer;font-size:13px;">📋 Copy Text</button>
+        <a id="whatsapp-share" href="#" target="_blank" style="padding:10px 18px;background:#25D366;border-radius:8px;color:#fff;text-decoration:none;font-size:13px;">💬 WhatsApp</a>
+        <a id="twitter-share" href="#" target="_blank" style="padding:10px 18px;background:#1DA1F2;border-radius:8px;color:#fff;text-decoration:none;font-size:13px;">🐦 Twitter</a>
+      </div>
+      <button onclick="document.getElementById('share-modal').style.display='none'" style="margin-top:20px;background:none;border:none;color:#666;cursor:pointer;font-size:13px;">✕ Close</button>
+    </div>
+  </div>
+
   <div class="system-tag">AI DRIVEN FITNESS INTELLIGENCE SYSTEM</div>
   <div class="footer-credit">developed by <span>Parth Tyagi</span></div>
 
   <script>
+  const shareText = `🏋️ My AI body fat prediction: {{ bf_pct }}% ({{ notes.bf_category }})
+Goal: {{ notes.goal_focus }}
+Try it free at: ${window.location.origin}/try`;
+
+  function shareResult() {
+    document.getElementById('share-modal').style.display = 'flex';
+    document.getElementById('whatsapp-share').href = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    document.getElementById('twitter-share').href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`;
+  }
+  function copyShareText() {
+    navigator.clipboard.writeText(shareText).then(() => {
+      const msg = document.getElementById('share-msg');
+      msg.style.display = 'block';
+      setTimeout(() => msg.style.display = 'none', 2500);
+    });
+  }
   (function() {
     const canvas = document.getElementById('bg');
     const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });

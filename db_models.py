@@ -1,14 +1,19 @@
 from flask_login import UserMixin
 from datetime import datetime
+import secrets
 from extensions import db
 
 
 class User(UserMixin, db.Model):
-    id            = db.Column(db.Integer, primary_key=True)
-    name          = db.Column(db.String(100), nullable=False)
-    email         = db.Column(db.String(150), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)
-    results       = db.relationship('Result', backref='user', lazy=True)
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(100), nullable=False)
+    email           = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash   = db.Column(db.String(200), nullable=True)   # nullable for Google users
+    google_id       = db.Column(db.String(200), unique=True, nullable=True)
+    referral_code   = db.Column(db.String(16), unique=True, nullable=False, default=lambda: secrets.token_hex(8))
+    referred_by     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    referral_count  = db.Column(db.Integer, default=0)
+    results         = db.relationship('Result', backref='user', lazy=True)
 
 
 class Result(db.Model):
