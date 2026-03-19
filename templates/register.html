@@ -24,7 +24,7 @@
       --accent2:#e0464b33;
     }
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-    html, body { height:100%; overflow:hidden; }
+    html, body { height:100%; }
     body { font-family:'Exo 2',sans-serif; color:var(--text); background:var(--bg); }
 
     /* ── Background canvas ── */
@@ -80,7 +80,7 @@
 
     /* ── Stage ── */
     .stage {
-      position:fixed; inset:0; z-index:10;
+      position:fixed; inset:0; z-index:100;
       display:flex; align-items:center; justify-content:center;
       padding:80px 24px 60px; overflow-y:auto;
     }
@@ -375,7 +375,7 @@
   </style>
 </head>
 <body>
-  <canvas id="bg"></canvas>
+  <canvas id="bg" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></canvas>
   <div class="grain"></div>
   <div class="hud-grid"></div>
 
@@ -501,6 +501,7 @@ window.addEventListener('DOMContentLoaded', () => {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.setClearColor(0x0a0a0a, 1);
+    canvas.style.zIndex = "0";
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 120);

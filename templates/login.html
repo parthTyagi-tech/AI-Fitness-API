@@ -22,11 +22,11 @@
     }
 
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; overflow: hidden; }
+    html, body { height: 100%; }
     body { font-family: 'Exo 2', sans-serif; color: var(--text); background: var(--bg); }
 
     /* ── Background canvas ── */
-    #bg { position: fixed; inset: 0; z-index: 0; }
+    #bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 
     /* ── Grain overlay ── */
     .grain {
@@ -46,7 +46,7 @@
 
     /* ── Brand bar ── */
     .brand-bar {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
       padding: 14px 28px;
       display: flex; align-items: center; justify-content: space-between;
       background: rgba(10,10,10,0.96);
@@ -90,7 +90,7 @@
 
     /* ── Stage ── */
     .stage {
-      position: fixed; inset: 0; z-index: 10;
+      position: fixed; inset: 0; z-index: 100;
       display: flex; align-items: center; justify-content: center;
       padding: 80px 24px 60px;
     }
@@ -413,7 +413,7 @@
   </style>
 </head>
 <body>
-  <canvas id="bg"></canvas>
+  <canvas id="bg" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></canvas>
   <div class="grain"></div>
   <div class="hud-grid"></div>
 
@@ -570,6 +570,7 @@
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.setClearColor(0x0a0a0a, 1);
+    canvas.style.zIndex = "0";
 
     const scene  = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 120);
