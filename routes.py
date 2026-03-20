@@ -24,6 +24,15 @@ from utils import validate_predict_form, build_notes, build_split, build_exercis
 main = Blueprint('main', __name__)
 
 
+
+# ── Temporary migration route ─────────────────────────────────────────────────
+@main.route('/run-migration-xyz123')
+def run_migration():
+    from flask import current_app
+    with current_app.app_context():
+        db.create_all()
+    return 'Migration complete! All tables updated.', 200
+
 # ── Home ──────────────────────────────────────────────────────────────────────
 @main.route('/')
 def home():
@@ -179,11 +188,8 @@ def google_login():
 def google_callback():
     try:
         token = oauth.google.authorize_access_token()
-        userinfo = token.get('userinfo')
-        if not userinfo:
-            resp = oauth.google.get('https://openidconnect.googleapis.com/v1/userinfo')
-            userinfo = resp.json()
-    except Exception as e:
+        userinfo = token.get('userinfo') or oauth.google.userinfo()
+    except Exception:
         flash('Google login failed. Please try again.')
         return redirect(url_for('main.login'))
 
