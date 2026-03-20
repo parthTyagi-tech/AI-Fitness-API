@@ -1,24 +1,20 @@
-"""
-app.py
-──────
-Application factory. Wires everything together — no business logic here.
-"""
-
 import os
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 import joblib
 from dotenv import load_dotenv
 
 from extensions import db, login_manager, oauth
 
-# Load .env file (works in dev; on Render/Railway you set env vars in dashboard)
 load_dotenv()
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    # ── Config ────────────────────────────────────────────────────────────────
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
+
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
     if not app.config['SECRET_KEY']:
         raise RuntimeError(
