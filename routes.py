@@ -177,17 +177,15 @@ def google_login():
 
 @main.route('/auth/google/callback')
 def google_callback():
- try:
-    token = oauth.google.authorize_access_token()
-    user_info = oauth.google.parse_id_token(token)
-
- except Exception as e:
-    print("🔥 GOOGLE ERROR:", e)
-    import traceback
-    traceback.print_exc()
-
-    flash(f"Error: {e}", "danger")
-    return redirect(url_for('main.login'))
+    try:
+        token = oauth.google.authorize_access_token()
+        userinfo = token.get('userinfo')
+        if not userinfo:
+            resp = oauth.google.get('https://openidconnect.googleapis.com/v1/userinfo')
+            userinfo = resp.json()
+    except Exception as e:
+        flash('Google login failed. Please try again.')
+        return redirect(url_for('main.login'))
 
     google_id = userinfo.get('sub')
     email     = userinfo.get('email', '').lower()

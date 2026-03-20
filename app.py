@@ -30,7 +30,8 @@ def create_app() -> Flask:
     # ── Google OAuth config ───────────────────────────────────────────────────
     app.config['GOOGLE_CLIENT_ID']     = os.environ.get('GOOGLE_CLIENT_ID', '')
     app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-
+    print("GOOGLE_CLIENT_ID:", app.config['GOOGLE_CLIENT_ID'])
+    print("GOOGLE_CLIENT_SECRET:", app.config['GOOGLE_CLIENT_SECRET'])
     # ── Load ML model once at startup ────────────────────────────────────────
     model_path = os.path.join(os.path.dirname(__file__), 'models', 'gym_ai_bodyfat_model.pkl')
     try:
