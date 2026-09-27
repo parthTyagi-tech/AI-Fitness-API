@@ -15,23 +15,15 @@ from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, abort, session, jsonify, current_app)
 from flask_login import login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-import pandas as pd
 
 from extensions import db, oauth
 from db_models import User, Result, UserProfile
-from utils import validate_predict_form, build_notes, build_split, build_exercises
+from utils import (validate_predict_form, build_notes, build_split, build_exercises,
+                   run_prediction, check_training_bounds,
+                   generate_reset_token, verify_reset_token)
 
 main = Blueprint('main', __name__)
 
-
-
-# ── Temporary migration route ─────────────────────────────────────────────────
-@main.route('/run-migration-xyz123')
-def run_migration():
-    from flask import current_app
-    with current_app.app_context():
-        db.create_all()
-    return 'Migration complete! All tables updated.', 200
 
 # ── Home ──────────────────────────────────────────────────────────────────────
 @main.route('/')
@@ -61,22 +53,9 @@ def guest_predict():
 
     model = current_app.config['MODEL']
     try:
-        person = pd.DataFrame([{
-            'age':               data['age'],
-            'gender':            data['gender'],
-            'height_cm':         data['height'],
-            'weight_kg':         data['weight'],
-            'waist_cm':          data['waist'],
-            'neck_cm':           data['neck'],
-            'hip_cm':            data['hip'],
-            'sleep_hours':       data['sleep'],
-            'workouts_per_week': data['workouts'],
-            'daily_calories':    data['calories'],
-            'activity_level':    data['activity'],
-            'fitness_goal':      data['goal'],
-        }])
-        bf_pct = round(float(model.predict(person)[0]), 2)
-    except Exception:
+        bf_pct = run_prediction(data, model)
+    except Exception as e:
+        current_app.logger.exception("Guest prediction failed: %s", e)
         flash('Prediction failed. Please check your inputs and try again.')
         return redirect(url_for('main.guest_form'))
 
@@ -86,6 +65,7 @@ def guest_predict():
     notes     = build_notes(data['goal'], bf_pct, data['gender'])
     split     = build_split(data['workouts'])
     exercises = build_exercises(split, data['exercise_location'])
+    unusual_warnings = check_training_bounds(data)
 
     ref = request.form.get('ref', '')
 
@@ -95,6 +75,7 @@ def guest_predict():
         height=data['height'], weight=data['weight'],
         split=split, notes=notes, exercises=exercises,
         exercise_location=data['exercise_location'],
+        unusual_warnings=unusual_warnings,
         is_guest=True, ref=ref,
     )
 
@@ -189,7 +170,8 @@ def google_callback():
     try:
         token = oauth.google.authorize_access_token()
         userinfo = token.get('userinfo') or oauth.google.userinfo()
-    except Exception:
+    except Exception as e:
+        current_app.logger.exception("Google OAuth login failed: %s", e)
         flash('Google login failed. Please try again.')
         return redirect(url_for('main.login'))
 
@@ -225,24 +207,59 @@ def google_callback():
 
 
 @main.route('/reset-password', methods=['GET', 'POST'])
-def reset_password():
-    if request.method == 'POST':
-        email        = request.form.get('email', '').strip().lower()
-        new_password = request.form.get('password', '').strip()
+@main.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token=None):
+    # Check for token in route param, query param, or form body
+    if not token:
+        token = request.args.get('token', '').strip() or request.form.get('token', '').strip()
 
-        if not email or not new_password:
-            flash('Both fields are required.')
+    # Flow A: Token provided -> Validate token and update password
+    if token:
+        email = verify_reset_token(token, current_app.config['SECRET_KEY'], max_age=1800)
+        if not email:
+            flash('The reset link is invalid or has expired (30-minute limit). Please request a new one.')
+            return redirect(url_for('main.reset_password'))
+
+        if request.method == 'POST':
+            new_password = request.form.get('password', '').strip()
+            if not new_password:
+                flash('Password cannot be empty.')
+                return render_template('reset_password.html', token=token, email=email)
+
+            user = User.query.filter_by(email=email).first()
+            if not user:
+                flash('Account not found.')
+                return redirect(url_for('main.reset_password'))
+
+            user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            flash('Your password has been successfully reset. Please log in.')
+            return redirect(url_for('main.login'))
+
+        return render_template('reset_password.html', token=token, email=email)
+
+    # Flow B: No token -> Request reset link for an email address
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if not email:
+            flash('Email address is required.')
             return redirect(url_for('main.reset_password'))
 
         user = User.query.filter_by(email=email).first()
         if user:
-            user.password_hash = generate_password_hash(new_password)
-            db.session.commit()
+            reset_token = generate_reset_token(user.email, current_app.config['SECRET_KEY'])
+            reset_url = url_for('main.reset_password', token=reset_token, _external=True)
 
-        flash('If that email is registered, the password has been updated.')
+            # Log link for development and audit trails
+            current_app.logger.info("Password reset token generated for [%s]. Reset URL: %s", user.email, reset_url)
+
+            # TODO: Wire up Flask-Mail or SMTP provider to send reset email automatically.
+            # Example: mail.send_message("Password Reset", recipients=[user.email], body=f"Reset link: {reset_url}")
+
+        flash('If that email is registered, a password reset link has been dispatched.')
         return redirect(url_for('main.login'))
 
-    return render_template('reset_password.html')
+    return render_template('reset_password.html', token=None)
 
 
 @main.route('/logout')
@@ -272,22 +289,9 @@ def predict():
     model = current_app.config['MODEL']
 
     try:
-        person = pd.DataFrame([{
-            'age':               data['age'],
-            'gender':            data['gender'],
-            'height_cm':         data['height'],
-            'weight_kg':         data['weight'],
-            'waist_cm':          data['waist'],
-            'neck_cm':           data['neck'],
-            'hip_cm':            data['hip'],
-            'sleep_hours':       data['sleep'],
-            'workouts_per_week': data['workouts'],
-            'daily_calories':    data['calories'],
-            'activity_level':    data['activity'],
-            'fitness_goal':      data['goal'],
-        }])
-        bf_pct = round(float(model.predict(person)[0]), 2)
-    except Exception:
+        bf_pct = run_prediction(data, model)
+    except Exception as e:
+        current_app.logger.exception("Prediction failed: %s", e)
         flash('Prediction failed. Please check your inputs and try again.')
         return redirect(url_for('main.fitness_form'))
 
@@ -319,6 +323,7 @@ def predict():
     notes     = build_notes(data['goal'], bf_pct, data['gender'])
     split     = build_split(data['workouts'])
     exercises = build_exercises(split, data['exercise_location'])
+    unusual_warnings = check_training_bounds(data)
 
     return render_template(
         'result.html',
@@ -326,6 +331,7 @@ def predict():
         height=data['height'], weight=data['weight'],
         split=split, notes=notes, exercises=exercises,
         exercise_location=data['exercise_location'],
+        unusual_warnings=unusual_warnings,
         is_guest=False, ref='',
     )
 

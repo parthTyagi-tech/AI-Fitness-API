@@ -224,7 +224,7 @@
         <h1>Your AI Fitness <span>Results</span></h1>
         <p>Personalized body fat prediction with machine-learning analysis, custom weekly training split, and goal-aligned recommendations.</p>
       </div>
-      <a href="{{ url_for('main.fitness_form') }}" class="styled-button">
+      <a href="{{ url_for('main.fitness_form') if not is_guest else url_for('main.guest_form') }}" class="styled-button">
         ← Back to Form
         <span class="inner-button">
           <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -233,6 +233,18 @@
         </span>
       </a>
     </div>
+
+    {% if unusual_warnings %}
+    <div style="margin-bottom:18px;padding:14px 18px;border-left:3px solid #eab308;background:rgba(234,179,8,0.08);border-radius:8px;color:#fde047;font-size:13px;line-height:1.5;">
+      <div style="font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:11px;margin-bottom:4px;color:#facc15;">⚠ Out of Training Distribution Notice</div>
+      <div>One or more of your inputs fall outside the core training dataset range. The prediction model may be less reliable for these values:</div>
+      <ul style="margin:6px 0 0 18px;">
+        {% for w in unusual_warnings %}
+          <li>{{ w }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
 
     <!-- Main result grid -->
     <div class="result-grid">

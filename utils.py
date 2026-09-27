@@ -1,15 +1,181 @@
 """
 utils.py
 ────────
-Pure business-logic helpers — no Flask imports, fully testable in isolation.
+Pure business-logic helpers — testable in isolation.
 """
+
+import pandas as pd
+import numpy as np
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from sklearn.base import BaseEstimator, TransformerMixin
+
+
+# ── Custom Scikit-Learn Pipeline Transformers ─────────────────────────────────
+
+class OutlierHandler(BaseEstimator, TransformerMixin):
+    """
+    Fits outlier bounds (IQR or 3-sigma) strictly on training data during fit(),
+    and applies clipping during transform(). No hardcoded constants.
+    """
+    def __init__(self, iqr_cols=None, zscore_cols=None):
+        self.iqr_cols = iqr_cols or ['age', 'weight_kg', 'waist_cm', 'daily_calories']
+        self.zscore_cols = zscore_cols or ['height_cm', 'hip_cm', 'sleep_hours']
+        self.bounds_ = {}
+
+    def fit(self, X, y=None):
+        X_df = pd.DataFrame(X)
+        self.bounds_ = {}
+        # IQR bounds
+        for col in self.iqr_cols:
+            if col in X_df.columns:
+                q1 = float(X_df[col].quantile(0.25))
+                q3 = float(X_df[col].quantile(0.75))
+                iqr = q3 - q1
+                self.bounds_[col] = (q1 - 1.5 * iqr, q3 + 1.5 * iqr)
+        # 3-sigma bounds
+        for col in self.zscore_cols:
+            if col in X_df.columns:
+                mean = float(X_df[col].mean())
+                std = float(X_df[col].std())
+                self.bounds_[col] = (mean - 3.0 * std, mean + 3.0 * std)
+        return self
+
+    def transform(self, X):
+        X_df = pd.DataFrame(X).copy()
+        for col, (lo, hi) in self.bounds_.items():
+            if col in X_df.columns:
+                X_df[col] = np.clip(X_df[col], lo, hi)
+        return X_df
+
+
+class FeatureEngineer(BaseEstimator, TransformerMixin):
+    """
+    Adds domain-specific biometric features:
+    - BMI: weight_kg / (height_m ^ 2)
+    - Waist-to-Hip Ratio (WHR): waist_cm / hip_cm
+    - Waist-to-Height Ratio (WHtR): waist_cm / height_cm
+    """
+    def __init__(self, include_features=True):
+        self.include_features = include_features
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        X_df = pd.DataFrame(X).copy()
+        if self.include_features:
+            h_m = X_df['height_cm'] / 100.0
+            X_df['bmi'] = X_df['weight_kg'] / (h_m ** 2)
+            X_df['waist_to_hip'] = X_df['waist_cm'] / X_df['hip_cm']
+            X_df['waist_to_height'] = X_df['waist_cm'] / X_df['height_cm']
+        return X_df
+
+
+# ── Single Source of Truth Constants ──────────────────────────────────────────
+
+GENDERS = {
+    'male': 'Male',
+    'female': 'Female',
+}
+
+ACTIVITY_LEVELS = {
+    'sedentary': 'Sedentary',
+    'light': 'Light',
+    'moderate': 'Moderate',
+    'active': 'Active',
+}
+
+FITNESS_GOALS = {
+    'fat_loss': 'Fat Loss',
+    'muscle_gain': 'Muscle Gain',
+    'maintain': 'Maintenance',
+}
+
+EXERCISE_LOCATIONS = {
+    'gym': 'Gym',
+    'home': 'Home',
+}
+
+# Actual training dataset ranges for validation bounds
+TRAINING_BOUNDS = {
+    'age': (16, 36),
+    'height': (145.0, 196.9),
+    'weight': (35.0, 110.0),
+    'waist': (60.0, 120.0),
+    'neck': (24.0, 48.0),
+    'hip': (75.0, 125.0),
+    'sleep': (4.0, 10.0),
+    'workouts': (0, 7),
+    'calories': (1200.0, 3881.0),
+}
+
+
+# ── Token-Based Password Reset Helpers ────────────────────────────────────────
+
+def generate_reset_token(email: str, secret_key: str) -> str:
+    """Generate a signed, time-limited token for password reset."""
+    serializer = URLSafeTimedSerializer(secret_key)
+    return serializer.dumps(email, salt='password-reset-salt')
+
+
+def verify_reset_token(token: str, secret_key: str, max_age: int = 1800) -> str | None:
+    """
+    Verify signed token. Returns email if valid, None if expired or tampered.
+    Default max_age is 1800 seconds (30 minutes).
+    """
+    if not token:
+        return None
+    serializer = URLSafeTimedSerializer(secret_key)
+    try:
+        email = serializer.loads(token, salt='password-reset-salt', max_age=max_age)
+        return email
+    except (SignatureExpired, BadSignature, Exception):
+        return None
+
+
+# ── Prediction Runner & Output Bounds ─────────────────────────────────────────
+
+def run_prediction(data: dict, model) -> float:
+    """
+    Build input DataFrame from validated data dict, call model.predict,
+    clip output to physiologically plausible range [3.0, 60.0], and round to 2 decimals.
+    """
+    person = pd.DataFrame([{
+        'age':               data['age'],
+        'gender':            data['gender'],
+        'height_cm':         data['height'],
+        'weight_kg':         data['weight'],
+        'waist_cm':          data['waist'],
+        'neck_cm':           data['neck'],
+        'hip_cm':            data['hip'],
+        'sleep_hours':       data['sleep'],
+        'workouts_per_week': data['workouts'],
+        'daily_calories':    data['calories'],
+        'activity_level':    data['activity'],
+        'fitness_goal':      data['goal'],
+    }])
+    raw_pred = float(model.predict(person)[0])
+    # Clip to physiologically plausible body fat percentage [3%, 60%]
+    clipped_pred = max(3.0, min(60.0, raw_pred))
+    return round(clipped_pred, 2)
+
+
+def check_training_bounds(data: dict) -> list[str]:
+    """Check if any input falls outside the core training dataset range."""
+    warnings = []
+    for key, (lo, hi) in TRAINING_BOUNDS.items():
+        val = data.get(key)
+        if val is not None and (val < lo or val > hi):
+            warnings.append(f"{key.capitalize()} ({val}) is outside the core model training range ({lo} - {hi}).")
+    return warnings
 
 
 # ── Input validation ──────────────────────────────────────────────────────────
 
 def validate_predict_form(form) -> tuple:
     """
-    Parse and validate every field from the prediction form.
+    Parse and validate every field from the prediction form using the
+    tightened training data bounds and standardized choice sets.
     Returns (data_dict, None) on success or (None, error_msg) on failure.
     """
     errors = []
@@ -57,21 +223,24 @@ def validate_predict_form(form) -> tuple:
             return None
         return raw
 
-    age      = _int  ('age',               'Age',            1,   120)
-    height   = _float('height',            'Height',         50,  280)
-    weight   = _float('weight',            'Weight',         20,  400)
-    waist    = _float('waist_cm',          'Waist',          40,  250)
-    neck     = _float('neck_cm',           'Neck',           20,  80)
-    hip      = _float('hip_cm',            'Hip',            40,  250)
-    sleep    = _float('sleep_hours',       'Sleep hours',    1,   24)
-    calories = _float('daily_calories',    'Daily calories', 500, 10000)
-    workouts = _int  ('workouts_per_week', 'Workouts/week',  0,   14)
-    gender   = _choice('gender',           'Gender',         {'male', 'female'})
-    activity = _choice('activity_level',   'Activity level', {'sedentary', 'light', 'moderate', 'active'})
-    location = _choice('exercise_location','Exercise location', {'home', 'gym'})
+    # Tightened bounds matching the actual 5,000-record dataset distributions
+    age      = _int  ('age',               'Age',            16,   36)
+    height   = _float('height',            'Height (cm)',    145.0, 196.9)
+    weight   = _float('weight',            'Weight (kg)',    35.0, 110.0)
+    waist    = _float('waist_cm',          'Waist (cm)',     60.0, 120.0)
+    neck     = _float('neck_cm',           'Neck (cm)',      24.0, 48.0)
+    hip      = _float('hip_cm',            'Hip (cm)',       75.0, 125.0)
+    sleep    = _float('sleep_hours',       'Sleep hours',    4.0,  10.0)
+    calories = _float('daily_calories',    'Daily calories', 1200.0, 3881.0)
+    workouts = _int  ('workouts_per_week', 'Workouts/week',  0,   7)
+    gender   = _choice('gender',           'Gender',         set(GENDERS.keys()))
+    activity = _choice('activity_level',   'Activity level', set(ACTIVITY_LEVELS.keys()))
+    location = _choice('exercise_location','Exercise location', set(EXERCISE_LOCATIONS.keys()))
 
     goal_raw = form.get('fitness_goal', '').strip().lower().replace(' ', '_')
-    goal = goal_raw if goal_raw in {'fat_loss', 'muscle_gain', 'maintenance'} else None
+    if goal_raw == 'maintenance':
+        goal_raw = 'maintain'
+    goal = goal_raw if goal_raw in FITNESS_GOALS else None
     if goal is None:
         errors.append("Fitness goal has an invalid value.")
 

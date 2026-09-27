@@ -253,29 +253,66 @@ Open **`http://localhost:5000`** in your browser. 🎉
 
 ---
 
+## 🤖 Machine Learning Model & 5-Fold Cross-Validation
+
+The core engine is an end-to-end scikit-learn Pipeline with:
+1. **Leak-Free Outlier Handling (`OutlierHandler`)**: Fits IQR & 3-sigma bounds strictly on training data during `.fit()`, preventing data leakage and eliminating hardcoded constants.
+2. **Biometric Feature Engineering (`FeatureEngineer`)**: Calculates Body Mass Index (BMI), Waist-to-Hip Ratio (WHR), and Waist-to-Height Ratio (WHtR).
+3. **Preprocessing (`ColumnTransformer`)**: `OneHotEncoder(handle_unknown='ignore', drop='first')` for categorical variables (`gender`, `fitness_goal`), `OrdinalEncoder` for `activity_level`, and `StandardScaler` for all numerical features.
+4. **Gradient Boosted Tree (`XGBRegressor`)**: Hyperparameter tuned via `RandomizedSearchCV` with early stopping.
+
+### 5-Fold Cross-Validation Benchmark Comparison
+
+<div align="center">
+
+| Model | Feature Engineering | $R^2$ Score | MAE (%) | RMSE (%) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Linear Regression** (Baseline) | None | $0.9890 \pm 0.0015$ | $0.3085 \pm 0.0119$ | $0.4604 \pm 0.0316$ |
+| **Linear Regression** (Enhanced) | BMI, WHR, WHtR | $0.9984 \pm 0.0012$ | $0.0380 \pm 0.0032$ | $0.1642 \pm 0.0592$ |
+| **XGBoost Regressor** (Default) | None | $0.9944 \pm 0.0018$ | $0.2100 \pm 0.0099$ | $0.3263 \pm 0.0503$ |
+| **XGBoost Regressor** (Tuned Production) | BMI, WHR, WHtR | **$0.9974 \pm 0.0018$** | **$0.0711 \pm 0.0074$** | **$0.2122 \pm 0.0700$** |
+
+</div>
+
+*Evaluated with 5-fold cross-validation (`KFold(n_splits=5, shuffle=True, random_state=42)`).*
+
+<br/>
+
+---
+
 ## 📂 Project Structure
 
 ```
 ai-fitness-api/
 │
-├── app.py                        # Flask application, routes & logic
+├── app.py                        # Flask application factory, ProxyFix & WSGI entry point
+├── routes.py                     # Main blueprint: routes, guest flows & OAuth
+├── utils.py                      # Pure business logic, token serializer, exercises & validation
+├── db_models.py                  # SQLAlchemy ORM models (User, Result, UserProfile)
+├── extensions.py                 # Extension singletons (SQLAlchemy, LoginManager, OAuth, CSRFProtect)
 │
-├── ml/
-│   └── model.pkl                 # Trained Scikit-learn model
+├── models/
+│   └── gym_ai_bodyfat_model.pkl  # Trained production ML pipeline (Joblib)
 │
 ├── templates/
-│   ├── login.html                # Two-column auth page + Three.js bg
-│   ├── register.html             # 3D flip card (login ↔ register)
-│   ├── index.html                # Biometric analysis form (12+ fields)
-│   ├── result.html               # ML results + workout split + notes
-│   ├── dashboard.html            # Profile card + prediction history table
-│   └── reset_password.html       # Credential recovery
+│   ├── login.html                # Two-column auth page + Three.js bg (CSRF protected)
+│   ├── register.html             # 3D flip card (login ↔ register, CSRF protected)
+│   ├── guest_form.html           # Free guest intake form (CSRF protected)
+│   ├── index.html                # Biometric analysis form (12+ fields, CSRF protected)
+│   ├── result.html               # ML results + workout split + warning banner
+│   ├── dashboard.html            # Profile card + prediction history table + account deletion
+│   ├── reset_password.html       # Time-limited token password recovery (30m expiry)
+│   ├── 404.html                  # Custom 404 Not Found error view
+│   └── 500.html                  # Custom 500 Server Error view
 │
 ├── static/
-│   └── assets/
-│       └── screenshots/          # Place your screenshots here
+│   └── images/
+│       ├── bg.jpg                # Gym background image
+│       └── style.css             # Supplementary stylesheet
 │
-├── requirements.txt
+├── start_01.ipynb                # End-to-end ML training, CV benchmark & tuning notebook
+├── fitness_dataset_5000.csv      # 5,000 participant training dataset
+├── requirements.txt              # Production dependency specifications
 └── README.md
 ```
 
@@ -286,13 +323,16 @@ ai-fitness-api/
 ## 🗺️ Roadmap
 
 - [x] ML body fat prediction engine (real-time)
-- [x] 12+ biometric input form
-- [x] User authentication — login / register / password reset
+- [x] 12+ biometric input form with standardized choice sets
+- [x] Token-based signed password reset (`itsdangerous`, 30-minute expiry)
+- [x] Complete CSRF protection via Flask-WTF
+- [x] User authentication — login / register / Google OAuth 2.0
 - [x] Prediction history tracking (per-user, timestamped)
-- [x] Custom weekly workout split generation
+- [x] Custom weekly workout split generation (Home / Gym)
 - [x] Goal-aligned training notes (cardio, sets/reps, safety)
 - [x] Three.js animated 3D background
 - [x] Neumorphic dark UI design system
+- [x] 5-Fold Cross Validation & XGBoost Hyperparameter Tuning
 - [ ] Progress charts (Chart.js / D3)
 - [ ] Nutrition & macro recommendations
 - [ ] Mobile app (React Native)

@@ -4,7 +4,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import joblib
 from dotenv import load_dotenv
 
-from extensions import db, login_manager, oauth
+from extensions import db, login_manager, oauth, csrf
 
 load_dotenv()
 
@@ -26,12 +26,13 @@ def create_app() -> Flask:
         'DATABASE_URL', 'sqlite:///database.db'
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['WTF_CSRF_SSL_STRICT'] = False
 
     # ── Google OAuth config ───────────────────────────────────────────────────
     app.config['GOOGLE_CLIENT_ID']     = os.environ.get('GOOGLE_CLIENT_ID', '')
     app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-    print("GOOGLE_CLIENT_ID:", app.config['GOOGLE_CLIENT_ID'])
-    print("GOOGLE_CLIENT_SECRET:", app.config['GOOGLE_CLIENT_SECRET'])
+    # Credentials are kept secure and never printed to stdout
+
     # ── Load ML model once at startup ────────────────────────────────────────
     model_path = os.path.join(os.path.dirname(__file__), 'models', 'gym_ai_bodyfat_model.pkl')
     try:
@@ -44,6 +45,7 @@ def create_app() -> Flask:
 
     # ── Extensions ───────────────────────────────────────────────────────────
     db.init_app(app)
+    csrf.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'main.login'
     login_manager.login_message = 'Please log in to access this page.'
@@ -65,6 +67,24 @@ def create_app() -> Flask:
     def load_user(user_id):
         return User.query.get(int(user_id))
 
+    # ── Template context processor for standardized choices ───────────────────
+    @app.context_processor
+    def inject_form_constants():
+        from utils import GENDERS, ACTIVITY_LEVELS, FITNESS_GOALS, EXERCISE_LOCATIONS
+        return dict(
+            GENDERS=GENDERS,
+            ACTIVITY_LEVELS=ACTIVITY_LEVELS,
+            FITNESS_GOALS=FITNESS_GOALS,
+            EXERCISE_LOCATIONS=EXERCISE_LOCATIONS,
+        )
+
+    # ── CLI Commands ─────────────────────────────────────────────────────────
+    @app.cli.command("init-db")
+    def init_db():
+        """Initialize and create all database tables from command line."""
+        db.create_all()
+        print("Database initialized successfully.")
+
     # ── Blueprints ────────────────────────────────────────────────────────────
     from routes import main
     app.register_blueprint(main)
@@ -79,5 +99,8 @@ def create_app() -> Flask:
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     flask_app = create_app()
-    debug_mode = os.environ.get('DEBUG', 'false').lower() == 'true'
+    # Security: Debug mode can NEVER be True unless FLASK_ENV=development is set
+    is_development = os.environ.get('FLASK_ENV', '').lower() == 'development'
+    debug_flag = os.environ.get('DEBUG', 'false').lower() == 'true'
+    debug_mode = is_development and debug_flag
     flask_app.run(debug=debug_mode)

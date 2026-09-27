@@ -121,6 +121,7 @@
           {% endfor %}{% endif %}
         {% endwith %}
         <form method="POST" action="{{ url_for('main.login') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="field">
             <div class="field-label">Email Address</div>
             <input class="input" type="email" name="email" placeholder="user@example.com" required>

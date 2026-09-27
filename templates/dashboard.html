@@ -287,6 +287,13 @@
             </div>
           </div>
         </div>
+
+        <form method="POST" action="{{ url_for('main.delete_account') }}" onsubmit="return confirm('Are you sure you want to permanently delete your account? All prediction history will be erased.');" style="margin-top:16px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" style="width:100%;padding:9px 12px;background:rgba(210,73,75,0.06);border:1px solid rgba(210,73,75,0.25);border-radius:6px;color:#d2494b;font-size:11px;font-family:'Barlow Condensed',sans-serif;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:all 0.2s ease;">
+            Delete Account
+          </button>
+        </form>
       </div>
 
       <!-- Table -->
