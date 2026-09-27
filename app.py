@@ -24,7 +24,10 @@ logger = logging.getLogger("ai_fitness")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Database Initialization ──────────────────────────────────────────────
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        logger.error("Database initialization failed during startup: %s", e)
 
     # ── Load ML Model ────────────────────────────────────────────────────────
     model_path = os.path.join(os.path.dirname(__file__), 'models', 'gym_ai_bodyfat_model.pkl')
