@@ -1,302 +1,338 @@
-"""
-routes.py
-─────────
-All Flask routes. Each route is intentionally thin — heavy logic lives in utils.py.
-
-NEW FEATURES:
-  - Guest prediction (try before signup)
-  - Google OAuth login
-  - Shareable result cards (PNG via html2canvas)
-  - Referral system
-  - Progress chart on dashboard
-"""
-
-from flask import (Blueprint, render_template, request, redirect,
-                   url_for, flash, abort, session, jsonify, current_app)
-from flask_login import login_user, login_required, logout_user, current_user
+import logging
+import os
+from fastapi import APIRouter, Request, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from extensions import db, oauth
-from db_models import User, Result, UserProfile
+from database import get_db
+from db_models import User, Result, UserProfile, AnonymousUser
+from extensions import oauth
+from auth import get_current_user, login_required, verify_csrf
+from templates import render_template, flash
 from utils import (validate_predict_form, build_notes, build_split, build_exercises,
                    run_prediction, check_training_bounds,
                    generate_reset_token, verify_reset_token)
 
-main = Blueprint('main', __name__)
+logger = logging.getLogger("ai_fitness")
+router = APIRouter()
 
 
 # ── Home ──────────────────────────────────────────────────────────────────────
-@main.route('/')
-def home():
-    # Guests land on the form directly (try before signup)
+@router.get('/')
+async def home(request: Request, current_user = Depends(get_current_user)):
     if current_user.is_authenticated:
-        return redirect(url_for('main.fitness_form'))
-    return redirect(url_for('main.guest_form'))
+        return RedirectResponse(url='/form', status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url='/try', status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ── Guest prediction (no login required) ─────────────────────────────────────
-@main.route('/try', methods=['GET'])
-def guest_form():
+@router.get('/try')
+async def guest_form(request: Request, current_user = Depends(get_current_user)):
     if current_user.is_authenticated:
-        return redirect(url_for('main.fitness_form'))
-    ref = request.args.get('ref', '')
-    return render_template('guest_form.html', ref=ref)
+        return RedirectResponse(url='/form', status_code=status.HTTP_303_SEE_OTHER)
+    ref = request.query_params.get('ref', '')
+    return render_template(request, 'guest_form.html', {'ref': ref})
 
 
-@main.route('/try/predict', methods=['POST'])
-def guest_predict():
-    """Run prediction for a guest. Store result in session, prompt sign-up."""
-    data, error = validate_predict_form(request.form)
+@router.post('/try/predict')
+async def guest_predict(request: Request):
+    form = dict(await request.form())
+    verify_csrf(request, form)
+
+    data, error = validate_predict_form(form)
     if error:
-        flash(f'Please fix the following: {error}')
-        return redirect(url_for('main.guest_form'))
+        flash(request, f'Please fix the following: {error}', 'danger')
+        return RedirectResponse(url='/try', status_code=status.HTTP_303_SEE_OTHER)
 
-    model = current_app.config['MODEL']
+    model = request.app.state.model
     try:
         bf_pct = run_prediction(data, model)
     except Exception as e:
-        current_app.logger.exception("Guest prediction failed: %s", e)
-        flash('Prediction failed. Please check your inputs and try again.')
-        return redirect(url_for('main.guest_form'))
+        logger.exception("Guest prediction failed: %s", e)
+        flash(request, 'Prediction failed. Please check your inputs and try again.', 'danger')
+        return RedirectResponse(url='/try', status_code=status.HTTP_303_SEE_OTHER)
 
     # Store in session so we can save it after sign-up
-    session['guest_result'] = {**data, 'bf_pct': bf_pct}
+    request.session['guest_result'] = {**data, 'bf_pct': bf_pct}
 
     notes     = build_notes(data['goal'], bf_pct, data['gender'])
     split     = build_split(data['workouts'])
     exercises = build_exercises(split, data['exercise_location'])
     unusual_warnings = check_training_bounds(data)
 
-    ref = request.form.get('ref', '')
+    ref = form.get('ref', '')
 
     return render_template(
+        request,
         'result.html',
-        bf_pct=bf_pct, gender=data['gender'], age=data['age'],
-        height=data['height'], weight=data['weight'],
-        split=split, notes=notes, exercises=exercises,
-        exercise_location=data['exercise_location'],
-        unusual_warnings=unusual_warnings,
-        is_guest=True, ref=ref,
+        {
+            'bf_pct': bf_pct,
+            'gender': data['gender'],
+            'age': data['age'],
+            'height': data['height'],
+            'weight': data['weight'],
+            'split': split,
+            'notes': notes,
+            'exercises': exercises,
+            'exercise_location': data['exercise_location'],
+            'unusual_warnings': unusual_warnings,
+            'is_guest': True,
+            'ref': ref,
+        }
     )
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-@main.route('/register', methods=['GET', 'POST'])
-def register():
+@router.get('/register')
+async def register_page(request: Request, current_user = Depends(get_current_user)):
     if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
-
-    if request.method == 'POST':
-        name     = request.form.get('name', '').strip()
-        email    = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '').strip()
-        ref_code = request.form.get('ref', '').strip()
-
-        if not name or not email or not password:
-            flash('All fields are required.')
-            return render_template('register.html', ref=ref_code)
-
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered. Please login.')
-            return render_template('register.html', ref=ref_code)
-
-        # Handle referral
-        referrer = None
-        if ref_code:
-            referrer = User.query.filter_by(referral_code=ref_code).first()
-
-        user = User(
-            name=name,
-            email=email,
-            password_hash=generate_password_hash(password),
-            referred_by=referrer.id if referrer else None,
-        )
-        db.session.add(user)
-
-        if referrer:
-            referrer.referral_count = (referrer.referral_count or 0) + 1
-
-        db.session.commit()
-
-        # Save any guest prediction that was done before sign-up
-        _save_guest_result(user)
-
-        login_user(user)
-        return redirect(url_for('main.fitness_form'))
-
-    ref = request.args.get('ref', '')
-    return render_template('register.html', ref=ref)
+        return RedirectResponse(url='/dashboard', status_code=status.HTTP_303_SEE_OTHER)
+    ref = request.query_params.get('ref', '')
+    return render_template(request, 'register.html', {'ref': ref})
 
 
-@main.route('/login', methods=['GET', 'POST'])
-def login():
+@router.post('/register')
+async def register(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+        return RedirectResponse(url='/dashboard', status_code=status.HTTP_303_SEE_OTHER)
 
-    if request.method == 'POST':
-        email    = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '').strip()
+    form = dict(await request.form())
+    verify_csrf(request, form)
 
-        if not email or not password:
-            flash('Email and password are required.')
-            return redirect(url_for('main.login'))
+    name     = form.get('name', '').strip()
+    email    = form.get('email', '').strip().lower()
+    password = form.get('password', '').strip()
+    ref_code = form.get('ref', '').strip()
 
-        user = User.query.filter_by(email=email).first()
+    if not name or not email or not password:
+        flash(request, 'All fields are required.', 'danger')
+        return render_template(request, 'register.html', {'ref': ref_code})
 
-        if not user or not user.password_hash or \
-                not check_password_hash(user.password_hash, password):
-            flash('Invalid email or password.')
-            return redirect(url_for('main.login'))
+    if db.query(User).filter(User.email == email).first():
+        flash(request, 'Email already registered. Please login.', 'danger')
+        return render_template(request, 'register.html', {'ref': ref_code})
 
-        login_user(user)
-        _save_guest_result(user)
-        return redirect(url_for('main.dashboard') if user.results
-                        else url_for('main.fitness_form'))
+    # Handle referral
+    referrer = None
+    if ref_code:
+        referrer = db.query(User).filter(User.referral_code == ref_code).first()
 
-    return render_template('login.html')
+    user = User(
+        name=name,
+        email=email,
+        password_hash=generate_password_hash(password),
+        referred_by=referrer.id if referrer else None,
+    )
+    db.add(user)
+
+    if referrer:
+        referrer.referral_count = (referrer.referral_count or 0) + 1
+
+    db.commit()
+    db.refresh(user)
+
+    # Save any guest prediction that was done before sign-up
+    _save_guest_result(request, user, db)
+
+    request.session['user_id'] = user.id
+    return RedirectResponse(url='/form', status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get('/login')
+async def login_page(request: Request, current_user = Depends(get_current_user)):
+    if current_user.is_authenticated:
+        return RedirectResponse(url='/dashboard', status_code=status.HTTP_303_SEE_OTHER)
+    return render_template(request, 'login.html')
+
+
+@router.post('/login')
+async def login(request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    if current_user.is_authenticated:
+        return RedirectResponse(url='/dashboard', status_code=status.HTTP_303_SEE_OTHER)
+
+    form = dict(await request.form())
+    verify_csrf(request, form)
+
+    email    = form.get('email', '').strip().lower()
+    password = form.get('password', '').strip()
+
+    if not email or not password:
+        flash(request, 'Email and password are required.', 'danger')
+        return RedirectResponse(url='/login', status_code=status.HTTP_303_SEE_OTHER)
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
+        flash(request, 'Invalid email or password.', 'danger')
+        return RedirectResponse(url='/login', status_code=status.HTTP_303_SEE_OTHER)
+
+    request.session['user_id'] = user.id
+    _save_guest_result(request, user, db)
+
+    dest = '/dashboard' if user.results else '/form'
+    return RedirectResponse(url=dest, status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
-@main.route('/auth/google')
-def google_login():
-    ref = request.args.get('ref', '')
-    session['oauth_ref'] = ref
-    redirect_uri = url_for('main.google_callback', _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
+@router.get('/auth/google')
+async def google_login(request: Request):
+    ref = request.query_params.get('ref', '')
+    request.session['oauth_ref'] = ref
+    redirect_uri = str(request.url_for('google_callback'))
+    if request.headers.get("x-forwarded-proto") == "https":
+        redirect_uri = redirect_uri.replace("http://", "https://", 1)
+    return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
-@main.route('/auth/google/callback')
-def google_callback():
+@router.get('/auth/google/callback')
+async def google_callback(request: Request, db: Session = Depends(get_db)):
     try:
-        token = oauth.google.authorize_access_token()
-        userinfo = token.get('userinfo') or oauth.google.userinfo()
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = token.get('userinfo') or await oauth.google.userinfo(request, token=token)
     except Exception as e:
-        current_app.logger.exception("Google OAuth login failed: %s", e)
-        flash('Google login failed. Please try again.')
-        return redirect(url_for('main.login'))
+        logger.exception("Google OAuth login failed: %s", e)
+        flash(request, 'Google login failed. Please try again.', 'danger')
+        return RedirectResponse(url='/login', status_code=status.HTTP_303_SEE_OTHER)
 
     google_id = userinfo.get('sub')
     email     = userinfo.get('email', '').lower()
     name      = userinfo.get('name', email.split('@')[0])
 
     # Find or create user
-    user = User.query.filter_by(google_id=google_id).first()
+    user = db.query(User).filter(User.google_id == google_id).first()
     if not user:
-        user = User.query.filter_by(email=email).first()
+        user = db.query(User).filter(User.email == email).first()
         if user:
             user.google_id = google_id   # link existing account
         else:
-            ref_code = session.pop('oauth_ref', '')
+            ref_code = request.session.pop('oauth_ref', '')
             referrer = None
             if ref_code:
-                referrer = User.query.filter_by(referral_code=ref_code).first()
+                referrer = db.query(User).filter(User.referral_code == ref_code).first()
             user = User(
                 name=name, email=email,
                 google_id=google_id,
                 referred_by=referrer.id if referrer else None,
             )
-            db.session.add(user)
+            db.add(user)
             if referrer:
                 referrer.referral_count = (referrer.referral_count or 0) + 1
-        db.session.commit()
+        db.commit()
+        db.refresh(user)
 
-    login_user(user)
-    _save_guest_result(user)
-    return redirect(url_for('main.dashboard') if user.results
-                    else url_for('main.fitness_form'))
+    request.session['user_id'] = user.id
+    _save_guest_result(request, user, db)
+
+    dest = '/dashboard' if user.results else '/form'
+    return RedirectResponse(url=dest, status_code=status.HTTP_303_SEE_OTHER)
 
 
-@main.route('/reset-password', methods=['GET', 'POST'])
-@main.route('/reset-password/<token>', methods=['GET', 'POST'])
-def reset_password(token=None):
-    # Check for token in route param, query param, or form body
-    if not token:
-        token = request.args.get('token', '').strip() or request.form.get('token', '').strip()
+# ── Password Recovery ─────────────────────────────────────────────────────────
+@router.get('/reset-password')
+@router.get('/reset-password/{token}')
+async def reset_password_get(request: Request, token: str = None):
+    secret_key = request.app.state.secret_key
+    effective_token = token or request.query_params.get('token', '').strip()
+
+    if effective_token:
+        email = verify_reset_token(effective_token, secret_key, max_age=1800)
+        if not email:
+            flash(request, 'The reset link is invalid or has expired (30-minute limit). Please request a new one.', 'danger')
+            return RedirectResponse(url='/reset-password', status_code=status.HTTP_303_SEE_OTHER)
+        return render_template(request, 'reset_password.html', {'token': effective_token, 'email': email})
+
+    return render_template(request, 'reset_password.html', {'token': None})
+
+
+@router.post('/reset-password')
+@router.post('/reset-password/{token}')
+async def reset_password_post(request: Request, db: Session = Depends(get_db), token: str = None):
+    secret_key = request.app.state.secret_key
+    form = dict(await request.form())
+    verify_csrf(request, form)
+
+    effective_token = token or request.query_params.get('token', '').strip() or form.get('token', '').strip()
 
     # Flow A: Token provided -> Validate token and update password
-    if token:
-        email = verify_reset_token(token, current_app.config['SECRET_KEY'], max_age=1800)
+    if effective_token:
+        email = verify_reset_token(effective_token, secret_key, max_age=1800)
         if not email:
-            flash('The reset link is invalid or has expired (30-minute limit). Please request a new one.')
-            return redirect(url_for('main.reset_password'))
+            flash(request, 'The reset link is invalid or has expired (30-minute limit). Please request a new one.', 'danger')
+            return RedirectResponse(url='/reset-password', status_code=status.HTTP_303_SEE_OTHER)
 
-        if request.method == 'POST':
-            new_password = request.form.get('password', '').strip()
-            if not new_password:
-                flash('Password cannot be empty.')
-                return render_template('reset_password.html', token=token, email=email)
+        new_password = form.get('password', '').strip()
+        if not new_password:
+            flash(request, 'Password cannot be empty.', 'danger')
+            return render_template(request, 'reset_password.html', {'token': effective_token, 'email': email})
 
-            user = User.query.filter_by(email=email).first()
-            if not user:
-                flash('Account not found.')
-                return redirect(url_for('main.reset_password'))
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            flash(request, 'Account not found.', 'danger')
+            return RedirectResponse(url='/reset-password', status_code=status.HTTP_303_SEE_OTHER)
 
-            user.password_hash = generate_password_hash(new_password)
-            db.session.commit()
-            flash('Your password has been successfully reset. Please log in.')
-            return redirect(url_for('main.login'))
-
-        return render_template('reset_password.html', token=token, email=email)
+        user.password_hash = generate_password_hash(new_password)
+        db.commit()
+        request.session.pop('user_id', None)
+        flash(request, 'Your password has been successfully reset. Please log in.', 'success')
+        return RedirectResponse(url='/login', status_code=status.HTTP_303_SEE_OTHER)
 
     # Flow B: No token -> Request reset link for an email address
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
-        if not email:
-            flash('Email address is required.')
-            return redirect(url_for('main.reset_password'))
+    email = form.get('email', '').strip().lower()
+    if not email:
+        flash(request, 'Email address is required.', 'danger')
+        return RedirectResponse(url='/reset-password', status_code=status.HTTP_303_SEE_OTHER)
 
-        user = User.query.filter_by(email=email).first()
-        if user:
-            reset_token = generate_reset_token(user.email, current_app.config['SECRET_KEY'])
-            reset_url = url_for('main.reset_password', token=reset_token, _external=True)
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        reset_token = generate_reset_token(user.email, secret_key)
+        base_url = str(request.base_url).rstrip('/')
+        reset_url = f"{base_url}/reset-password/{reset_token}"
 
-            # Log link for development and audit trails
-            current_app.logger.info("Password reset token generated for [%s]. Reset URL: %s", user.email, reset_url)
+        # Log link for development and audit trails
+        logger.info("Password reset token generated for [%s]. Reset URL: %s", user.email, reset_url)
 
-            # TODO: Wire up Flask-Mail or SMTP provider to send reset email automatically.
-            # Example: mail.send_message("Password Reset", recipients=[user.email], body=f"Reset link: {reset_url}")
+        # TODO: Wire up email sending service (SMTP / SendGrid / Resend)
+        # Example: send_email(to=user.email, subject="Reset Password", body=f"Reset link: {reset_url}")
 
-        flash('If that email is registered, a password reset link has been dispatched.')
-        return redirect(url_for('main.login'))
-
-    return render_template('reset_password.html', token=None)
+    flash(request, 'If that email is registered, a password reset link has been dispatched.', 'info')
+    return RedirectResponse(url='/login', status_code=status.HTTP_303_SEE_OTHER)
 
 
-@main.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('main.login'))
+@router.get('/logout')
+async def logout(request: Request, current_user: User = Depends(login_required)):
+    request.session.pop('user_id', None)
+    return RedirectResponse(url='/login', status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ── Prediction Form ───────────────────────────────────────────────────────────
-@main.route('/form')
-@login_required
-def fitness_form():
-    profile = UserProfile.query.filter_by(user_id=current_user.id).first()
-    return render_template('index.html', user=current_user, profile=profile)
+@router.get('/form')
+async def fitness_form(request: Request, db: Session = Depends(get_db), current_user: User = Depends(login_required)):
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    return render_template(request, 'index.html', {'user': current_user, 'profile': profile})
 
 
 # ── Prediction ────────────────────────────────────────────────────────────────
-@main.route('/predict', methods=['POST'])
-@login_required
-def predict():
-    data, error = validate_predict_form(request.form)
+@router.post('/predict')
+async def predict(request: Request, db: Session = Depends(get_db), current_user: User = Depends(login_required)):
+    form = dict(await request.form())
+    verify_csrf(request, form)
+
+    data, error = validate_predict_form(form)
     if error:
-        flash(f'Please fix the following: {error}')
-        return redirect(url_for('main.fitness_form'))
+        flash(request, f'Please fix the following: {error}', 'danger')
+        return RedirectResponse(url='/form', status_code=status.HTTP_303_SEE_OTHER)
 
-    model = current_app.config['MODEL']
-
+    model = request.app.state.model
     try:
         bf_pct = run_prediction(data, model)
     except Exception as e:
-        current_app.logger.exception("Prediction failed: %s", e)
-        flash('Prediction failed. Please check your inputs and try again.')
-        return redirect(url_for('main.fitness_form'))
+        logger.exception("Prediction failed: %s", e)
+        flash(request, 'Prediction failed. Please check your inputs and try again.', 'danger')
+        return RedirectResponse(url='/form', status_code=status.HTTP_303_SEE_OTHER)
 
     # Save / update user profile
-    profile = UserProfile.query.filter_by(user_id=current_user.id).first()
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
     if not profile:
         profile = UserProfile(user_id=current_user.id)
 
@@ -306,7 +342,7 @@ def predict():
     profile.activity          = data['activity']
     profile.goal              = data['goal']
     profile.exercise_location = data['exercise_location']
-    db.session.add(profile)
+    db.add(profile)
 
     result = Result(
         user_id=current_user.id,
@@ -317,8 +353,8 @@ def predict():
         goal=data['goal'], exercise_location=data['exercise_location'],
         bf_pct=bf_pct,
     )
-    db.session.add(result)
-    db.session.commit()
+    db.add(result)
+    db.commit()
 
     notes     = build_notes(data['goal'], bf_pct, data['gender'])
     split     = build_split(data['workouts'])
@@ -326,22 +362,30 @@ def predict():
     unusual_warnings = check_training_bounds(data)
 
     return render_template(
+        request,
         'result.html',
-        bf_pct=bf_pct, gender=data['gender'], age=data['age'],
-        height=data['height'], weight=data['weight'],
-        split=split, notes=notes, exercises=exercises,
-        exercise_location=data['exercise_location'],
-        unusual_warnings=unusual_warnings,
-        is_guest=False, ref='',
+        {
+            'bf_pct': bf_pct,
+            'gender': data['gender'],
+            'age': data['age'],
+            'height': data['height'],
+            'weight': data['weight'],
+            'split': split,
+            'notes': notes,
+            'exercises': exercises,
+            'exercise_location': data['exercise_location'],
+            'unusual_warnings': unusual_warnings,
+            'is_guest': False,
+            'ref': '',
+        }
     )
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-@main.route('/dashboard')
-@login_required
-def dashboard():
-    results = (Result.query
-               .filter_by(user_id=current_user.id)
+@router.get('/dashboard')
+async def dashboard(request: Request, db: Session = Depends(get_db), current_user: User = Depends(login_required)):
+    results = (db.query(Result)
+               .filter(Result.user_id == current_user.id)
                .order_by(Result.created_at.asc())
                .all())
 
@@ -350,44 +394,50 @@ def dashboard():
     chart_data   = [r.bf_pct for r in results]
 
     # Referral link
-    referral_url = url_for('main.guest_form', ref=current_user.referral_code, _external=True)
+    base_url = str(request.base_url).rstrip('/')
+    referral_url = f"{base_url}/try?ref={current_user.referral_code}"
 
     return render_template(
+        request,
         'dashboard.html',
-        user=current_user,
-        results=list(reversed(results)),  # newest first for table
-        chart_labels=chart_labels,
-        chart_data=chart_data,
-        referral_url=referral_url,
+        {
+            'user': current_user,
+            'results': list(reversed(results)),  # newest first for table
+            'chart_labels': chart_labels,
+            'chart_data': chart_data,
+            'referral_url': referral_url,
+        }
     )
 
 
 # ── Delete Account ────────────────────────────────────────────────────────────
-@main.route('/delete-account', methods=['POST'])
-@login_required
-def delete_account():
-    user = User.query.get(current_user.id)
+@router.post('/delete-account')
+async def delete_account(request: Request, db: Session = Depends(get_db), current_user: User = Depends(login_required)):
+    form = dict(await request.form())
+    verify_csrf(request, form)
+
+    user = db.query(User).filter(User.id == current_user.id).first()
     if not user:
-        abort(404)
+        raise HTTPException(status_code=404, detail="User not found")
 
-    Result.query.filter_by(user_id=user.id).delete()
-    UserProfile.query.filter_by(user_id=user.id).delete()
-    db.session.delete(user)
-    db.session.commit()
+    db.query(Result).filter(Result.user_id == user.id).delete()
+    db.query(UserProfile).filter(UserProfile.user_id == user.id).delete()
+    db.delete(user)
+    db.commit()
 
-    logout_user()
-    flash('Your account has been permanently deleted.')
-    return redirect(url_for('main.register'))
+    request.session.pop('user_id', None)
+    flash(request, 'Your account has been permanently deleted.', 'info')
+    return RedirectResponse(url='/register', status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
-def _save_guest_result(user):
+def _save_guest_result(request: Request, user: User, db: Session):
     """If a guest prediction was done before login/signup, save it now."""
-    gr = session.pop('guest_result', None)
+    gr = request.session.pop('guest_result', None)
     if not gr:
         return
 
-    profile = UserProfile.query.filter_by(user_id=user.id).first()
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
     if not profile:
         profile = UserProfile(user_id=user.id)
     profile.age               = gr['age']
@@ -396,7 +446,7 @@ def _save_guest_result(user):
     profile.activity          = gr['activity']
     profile.goal              = gr['goal']
     profile.exercise_location = gr['exercise_location']
-    db.session.add(profile)
+    db.add(profile)
 
     result = Result(
         user_id=user.id,
@@ -407,5 +457,5 @@ def _save_guest_result(user):
         goal=gr['goal'], exercise_location=gr['exercise_location'],
         bf_pct=gr['bf_pct'],
     )
-    db.session.add(result)
-    db.session.commit()
+    db.add(result)
+    db.commit()

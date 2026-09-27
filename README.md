@@ -285,11 +285,14 @@ The core engine is an end-to-end scikit-learn Pipeline with:
 ```
 ai-fitness-api/
 │
-├── app.py                        # Flask application factory, ProxyFix & WSGI entry point
-├── routes.py                     # Main blueprint: routes, guest flows & OAuth
+├── app.py                        # FastAPI application, lifespan, session middleware & ASGI entry point
+├── routes.py                     # Main router: prediction endpoints, guest flows & OAuth
+├── database.py                   # SQLAlchemy 2.0 engine, SessionLocal & init_db
+├── db_models.py                  # Declarative SQLAlchemy models (User, Result, UserProfile)
+├── templates.py                  # Jinja2Templates configuration, url_for, flash & CSRF helpers
+├── auth.py                       # Auth dependencies (get_current_user, login_required, verify_csrf)
 ├── utils.py                      # Pure business logic, token serializer, exercises & validation
-├── db_models.py                  # SQLAlchemy ORM models (User, Result, UserProfile)
-├── extensions.py                 # Extension singletons (SQLAlchemy, LoginManager, OAuth, CSRFProtect)
+├── extensions.py                 # Starlette OAuth client configuration
 │
 ├── models/
 │   └── gym_ai_bodyfat_model.pkl  # Trained production ML pipeline (Joblib)
@@ -310,9 +313,10 @@ ai-fitness-api/
 │       ├── bg.jpg                # Gym background image
 │       └── style.css             # Supplementary stylesheet
 │
+├── runtime.txt                   # Pinned python-3.11.9 runtime for Render
 ├── start_01.ipynb                # End-to-end ML training, CV benchmark & tuning notebook
 ├── fitness_dataset_5000.csv      # 5,000 participant training dataset
-├── requirements.txt              # Production dependency specifications
+├── requirements.txt              # Production dependency specifications (FastAPI, Uvicorn, Psycopg)
 └── README.md
 ```
 
